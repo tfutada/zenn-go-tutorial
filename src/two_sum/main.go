@@ -1,8 +1,30 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"log"
+	"os"
+	"runtime/pprof"
+)
 
 func main() {
+
+	// Create a file to store the CPU profile.
+	cpuProfile, err := os.Create("cpu.pprof")
+	if err != nil {
+		log.Fatal("could not create CPU profile: ", err)
+	}
+	// Ensure that the profile will be closed and written when the function returns.
+	defer cpuProfile.Close()
+
+	// Start the CPU profiler.
+	if err := pprof.StartCPUProfile(cpuProfile); err != nil {
+		log.Fatal("could not start CPU profile: ", err)
+	}
+	// Ensure that the profiler is stopped before the function returns.
+	defer pprof.StopCPUProfile()
+
+	// main func
 	nums := []int{2, 7, 11, 15}
 	target := 18
 	result := TwoSumBruteForce(nums, target)
