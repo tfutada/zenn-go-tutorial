@@ -4,12 +4,11 @@ import (
 	"io"
 )
 
+func main() {
 
-func main()  {
-	
 }
 
-// サイズがFsizeのファイルをnbyteごと読む関数
+// ReadOS サイズがFsizeのファイルをnbyteごと読む関数
 func ReadOS(r io.Reader, n int, Fsize int) {
 	data := make([]byte, n)
 
@@ -18,4 +17,3 @@ func ReadOS(r io.Reader, n int, Fsize int) {
 		r.Read(data)
 	}
 }
-
