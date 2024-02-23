@@ -36,7 +36,7 @@ func TestTwoSumBruteForce(t *testing.T) {
 }
 
 // BenchmarkAdd benchmarks the Add function.
-func BenchmarkAdd(b *testing.B) {
+func BenchmarkTwoSumBruteForce(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		TwoSumBruteForce([]int{2, 7, 11, 15}, 9)
 	}
