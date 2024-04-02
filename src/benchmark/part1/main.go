@@ -2,15 +2,19 @@ package main
 
 import (
 	"strconv"
-	"strings"
 )
 
-func parseInput(s string) []int {
-	data := strings.Split(strings.Split(s, "\n")[0], ",")
-	fish := make([]int, len(data))
+func parseInput(s string) []byte {
+	fish := make([]byte, 0, len(s)/2)
 
-	for i, d := range data {
-		fish[i] = MustAtoi(d)
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			break
+		}
+		if s[i] == ',' {
+			continue
+		}
+		fish = append(fish, s[i])
 	}
 
 	return fish
@@ -24,22 +28,23 @@ func MustAtoi(s string) int {
 	return n
 }
 
+// Solve function
 func Solve(input string, days int) int {
 	fish := parseInput(input)
+	tempFish := []byte{}
 
 	for i := 0; i < days; i++ {
-		tempFish := []int{}
-
 		for j := range fish {
-			if fish[j] == 0 {
-				fish[j] = 6
-				tempFish = append(tempFish, 8)
+			if fish[j] == '0' {
+				fish[j] = '6'
+				tempFish = append(tempFish, '8')
 			} else {
 				fish[j]--
 			}
 		}
 
 		fish = append(fish, tempFish...)
+		tempFish = tempFish[:0]
 	}
 
 	return len(fish)
