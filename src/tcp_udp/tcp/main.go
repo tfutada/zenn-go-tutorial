@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"time"
@@ -19,7 +20,6 @@ func main() {
 			log.Print(err)
 			continue
 		}
-		defer conn.Close()
 
 		println("connected")
 		go handleconn(conn)
@@ -27,13 +27,26 @@ func main() {
 }
 
 func handleconn(conn net.Conn) {
+	defer conn.Close() // Ensure the connection is closed when this function exits
+
 	time.Sleep(10 * time.Second)
 
 	buf := make([]byte, 1024)
 
 	// this won't terminate. it will keep reading from the connection.
 	for {
-		n, _ := conn.Read(buf) // consume packets to a buffer. it is possible that multiple 'hello' messages are read at once.
+		n, err := conn.Read(buf) // consume packets to a buffer. it is possible that multiple 'hello' messages are read at once.
+		if err != nil {
+			if err == io.EOF {
+				// The client closed the connection gracefully
+				fmt.Println("Client has closed the connection")
+			} else {
+				// An actual error occurred
+				fmt.Println("Error reading:", err)
+			}
+			break // Exit the loop either way
+		}
+
 		fmt.Println(string(buf[:n]))
 		time.Sleep(3 * time.Second)
 	}
