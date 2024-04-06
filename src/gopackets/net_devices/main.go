@@ -7,6 +7,7 @@ import (
 	"github.com/google/gopacket/pcap"
 )
 
+// https://medium.com/a-bit-off/sniffing-network-go-6753cae91d3f
 func main() {
 	devices, err := pcap.FindAllDevs()
 	if err != nil {
