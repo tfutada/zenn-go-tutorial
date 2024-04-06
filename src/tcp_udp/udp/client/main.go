@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	conn, err := net.Dial("udp", "localhost:8088")
+	conn, err := net.Dial("udp", "localhost:5106")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -38,6 +38,6 @@ func main() {
 
 		fmt.Printf("Server reply: %s\n", string(buffer[:n]))
 
-		time.Sleep(3 * time.Second)
+		time.Sleep(100 * time.Millisecond)
 	}
 }

@@ -21,7 +21,7 @@ func main() {
 
 	buffer := make([]byte, 4096) // max size of UDP packet is 64KB actually
 	for {
-		n, remoteAddr, err := conn.ReadFromUDP(buffer) // UDP is connectionless so we need to read the address as well
+		n, remoteAddr, err := conn.ReadFromUDP(buffer) // UDP is connectionless, so we need to read the address as well
 		if err != nil {
 			log.Printf("Error reading from UDP: %v", err)
 			continue
