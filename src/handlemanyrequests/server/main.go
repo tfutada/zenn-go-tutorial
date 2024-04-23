@@ -9,12 +9,13 @@ import (
 	"net/http"
 	"runtime"
 	"sync/atomic"
+	"time"
 )
 
 func hello(w http.ResponseWriter, req *http.Request) {
 	ch <- true // dump stats
 	atomic.AddInt32(&count, 1)
-	//time.Sleep(time.Second * 10)
+	time.Sleep(time.Second * 3)
 	//_, _ = fmt.Fprintf(w, "hello\n")
 	workerChann <- "work"
 	ret := <-workerChann
@@ -69,7 +70,7 @@ func main() {
 func getHashOfRandomString(task string) string {
 	var d = make([]byte, 32)
 	rand.Read(d)
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1000000; i++ {
 		result := sha3.Sum512(d)
 		d = result[:]
 	}
