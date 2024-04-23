@@ -28,6 +28,8 @@ func main() {
 		var m runtime.MemStats
 		var writer = uilive.New()
 		writer.Start()
+		defer writer.Stop()
+
 		for {
 			<-ch
 			_, _ = fmt.Fprintf(writer, "Current connections count: %d\n", atomic.LoadInt32(&count))
