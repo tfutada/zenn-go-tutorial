@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -25,10 +26,11 @@ func main() {
 			}
 			defer resp.Body.Close() // Ensure the response body is closed
 
-			// Read and discard the response body to free up the connection
-			_, err = io.Copy(io.Discard, resp.Body)
+			// dump resp
+			_, err = io.Copy(os.Stdout, resp.Body)
 			if err != nil {
-				fmt.Printf("%d: Failed to read response body: %s\n", n, err.Error())
+				fmt.Printf("%d: Failed to copy response body to stdout: %s\n", n, err.Error())
+				return
 			}
 		}(i)
 
