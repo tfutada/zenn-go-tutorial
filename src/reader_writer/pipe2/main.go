@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -17,8 +18,12 @@ func main() {
 			log.Printf("error writing to pipe: %v", err)
 			return
 		}
+		log.Printf("done writing")
 	}()
 
+	time.Sleep(10 * time.Second)
+
+	log.Printf("reading from pipe")
 	// Read and transform the data in the main goroutine
 	if err := tr(pipeReader, "e", "i"); err != nil {
 		log.Printf("error reading from pipe: %v", err)
