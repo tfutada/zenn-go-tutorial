@@ -28,7 +28,7 @@ func run() {
 
 	buffer := make([]byte, BufferSize)
 	for {
-		readBytes, err := file.Read(buffer) // same buffer is reused so race condition could happen.
+		n, err := file.Read(buffer) // same buffer is reused so race condition could happen.
 		if err == io.EOF {
 			break
 		}
@@ -37,9 +37,10 @@ func run() {
 			panic(err)
 		}
 
-		//channel <- buffer
-		channel <- append([]byte(nil), buffer[:readBytes]...) // to avoid the race condition, clone the buffer
+		data := make([]byte, n)
+		copy(data, buffer[:n]) // avoid the race condition by copying the data
 
+		channel <- data
 	}
 }
 
