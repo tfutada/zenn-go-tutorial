@@ -24,11 +24,11 @@ func run() {
 	}
 	defer file.Close()
 
-	const BUFFER_SIZE = 4096 * 4096 // 4MB
+	const BufferSize = 4096 // 4KB
 
-	buffer := make([]byte, BUFFER_SIZE)
+	buffer := make([]byte, BufferSize)
 	for {
-		_, err := file.Read(buffer)
+		readBytes, err := file.Read(buffer) // same buffer is reused so race condition could happen.
 		if err == io.EOF {
 			break
 		}
@@ -37,7 +37,9 @@ func run() {
 			panic(err)
 		}
 
-		channel <- buffer
+		//channel <- buffer
+		channel <- append([]byte(nil), buffer[:readBytes]...) // to avoid the race condition, clone the buffer
+
 	}
 }
 
