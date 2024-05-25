@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -10,21 +9,29 @@ func renameFile(oldName, newName string) error {
 	return os.Rename(oldName, newName)
 }
 
+func writeDummyData(fileName string, size int) error {
+	data := make([]byte, size)
+	for i := range data {
+		data[i] = 'A' // Writing 'A' character to fill the file
+	}
+	return os.WriteFile(fileName, data, 0644)
+}
+
 func readFileToMemory(fileName string) ([]byte, error) {
-	return ioutil.ReadFile(fileName)
+	return os.ReadFile(fileName)
 }
 
 func BenchmarkRenameAndReadFile(b *testing.B) {
 	oldName := "oldfile.txt"
 	newName := "newfile.txt"
+	dummyDataSize := 10 * 1024 // 10KB
 
 	for i := 0; i < b.N; i++ {
-		// Create a dummy file to rename
-		file, err := os.Create(oldName)
+		// Create and write dummy data to the file
+		err := writeDummyData(oldName, dummyDataSize)
 		if err != nil {
-			b.Fatalf("Failed to create file: %v", err)
+			b.Fatalf("Failed to write dummy data: %v", err)
 		}
-		file.Close()
 
 		// Rename the file
 		err = renameFile(oldName, newName)
@@ -49,13 +56,13 @@ func BenchmarkRenameAndReadFile(b *testing.B) {
 func TestRenameAndReadFile(t *testing.T) {
 	oldName := "oldfile.txt"
 	newName := "newfile.txt"
+	dummyDataSize := 10 * 1024 // 10KB
 
-	// Create a dummy file to rename
-	file, err := os.Create(oldName)
+	// Create and write dummy data to the file
+	err := writeDummyData(oldName, dummyDataSize)
 	if err != nil {
-		t.Fatalf("Failed to create file: %v", err)
+		t.Fatalf("Failed to write dummy data: %v", err)
 	}
-	file.Close()
 
 	// Test renaming the file
 	err = renameFile(oldName, newName)
