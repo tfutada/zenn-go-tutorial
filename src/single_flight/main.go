@@ -14,7 +14,7 @@ import (
 func simulateFetch(key string) (string, error) {
 	fmt.Printf("Fetching data for key(should appear only once): %s\n", key)
 	// Simulate a delay, e.g., database query or API call
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	// Return the fetched data
 	return fmt.Sprintf("Data for %s", key), nil
 }
@@ -36,9 +36,10 @@ func main() {
 	wg.Add(numGoroutines)
 
 	for i := 1; i <= numGoroutines; i++ {
+
 		go func(id int) {
 			defer wg.Done()
-
+			time.Sleep(time.Duration(id) * time.Second)
 			// Use the singleflight Group to do the fetch
 			v, err, shared := g.Do(key, func() (interface{}, error) {
 				// This function will be executed only once for the same key
