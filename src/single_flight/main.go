@@ -10,8 +10,9 @@ import (
 )
 
 // simulateFetch simulates a time-consuming data fetch operation.
+// NB. Functions should be idempotent, i.e., calling them multiple times with the same arguments should return the same result.
 func simulateFetch(key string) (string, error) {
-	fmt.Printf("Fetching data for key: %s\n", key)
+	fmt.Printf("Fetching data for key(should appear only once): %s\n", key)
 	// Simulate a delay, e.g., database query or API call
 	time.Sleep(2 * time.Second)
 	// Return the fetched data
