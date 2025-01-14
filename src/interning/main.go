@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"unique"
 )
 
 var memstat runtime.MemStats
@@ -12,12 +13,12 @@ var memstat runtime.MemStats
 func mem() {
 	runtime.GC()
 	runtime.ReadMemStats(&memstat)
-	const KiB = 1024
-	fmt.Println("! The program is now using: ", memstat.Alloc/KiB, "KiB")
+	//const KiB = 1024
+	fmt.Println("! The program is now using: ", memstat.Alloc, "KiB")
 }
 
 func main() {
-	data, err := os.ReadFile("src/interning/large_book.txt")
+	data, err := os.ReadFile("./large_book.txt")
 	if err != nil {
 		log.Fatalln("Could not read file:", err)
 	}
@@ -53,13 +54,17 @@ func main() {
 
 		// 4. Check if this word starts with B or b
 		if len(word) > 0 && (word[0] == 'B' || word[0] == 'b') {
-			Bwords = append(Bwords, word)
+			//cloned := strings.Clone(word)
+			handle := unique.Make(word)
+			Bwords = append(Bwords, handle.Value())
 		}
 
 		// The loop continues until i reaches len(book)
 	}
 
+	mem()
+
 	fmt.Printf("Found %d words starting with 'B' or 'b'\n", len(Bwords))
 	fmt.Printf("The first 10 words are: %#v\n", Bwords[:10])
-	mem()
+
 }
