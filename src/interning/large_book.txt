@@ -1,0 +1,511 @@
+
+Search
+Write
+
+Takash Futada
+
+
+
+
+
+Interning in Go
+Val Deleplace
+Google Cloud - Community
+Val Deleplace
+
+·
+Follow
+
+Published in
+Google Cloud - Community
+
+·
+4 min read
+·
+Sep 17, 2024
+732
+
+
+5
+
+
+
+
+
+Go 1.23 comes with a new package unique implementing interning, and a blog post about it. Interning is re-using objects of equal value instead of keeping duplicate equal objects in memory. It is intended to reduce memory usage.
+
+Example program
+The source code is hosted on GitHub. This program is an illustration of a use case for unique, with numbers!
+
+A large string in memory
+In this example, I have a very large plaintext file and I’m loading it fully in memory. This results in a string variable book that occupies 282 MiB of memory.
+
+data, err := os.ReadFile("./large_book.txt")
+if err != nil {
+    log.Fatalln(err)
+}
+book := string(data)
+
+The memory will be monitored using a helper function mem() that runs a full garbage collection, and displays the remaining memory usage:
+
+func mem() {
+    runtime.GC()
+    runtime.ReadMemStats(&memstat)
+    const MiB = 1024 * 1024
+    fmt.Println("The program is now using", memstat.Alloc/MiB, "MiB")
+}
+After loading the file, this is the output of the function mem() :
+
+The program is now using 282 MiB
+Let’s say I want to build a slice Bwords of all of the words in the book that start with the letter “B”. In my sample book, about 2% of the words are starting with a “B”. Once I have my B-words, I don’t need the full book anymore, and I’d like its memory to be freed.
+
+Let’s explore 3 different strategies to achieve this.
+
+Slices of a large string
+Source: nointerning.go
+
+Inside a single loop I’m finding all the words in book , and adding them to Bwords if they start with a “B”:
+
+word := book[a:i]
+if word[0] == 'b' || word[0] == 'B' {
+    Bwords = append(Bwords, word)
+}
+In Go, strings are immutable and it is safe to use a slice book[a:i] as a small substring of a much larger string:
+
+
+As you can see, Bwords contains string headers that happen to have pointers to fragments of memory inside the large string book . As long as we keep using Bwords, the memory of book has no chance of being reclaimed by the garbage collector (GC).
+
+The program is now using 299 MiB
+Building Bwords allocated 17 MiB of string headers, in addition to the 282 MiB still used by books.
+
+Cloned strings
+Source: nointerning_Clone.go
+
+The function strings.Clone, introduced in Go 1.18, is designed precisely to “retain only a small substring of a much larger string”.
+
+word := book[a:i]
+if word[0] == 'b' || word[0] == 'B' {
+    cloned := strings.Clone(word)
+    Bwords = append(Bwords, cloned)
+}
+
+Calling mem() after the last use of books, and before the last use of Bwords , prints
+
+The program is now using 23 MiB
+23 MiB is the total size of the small cloned strings contents, plus the size of the Bwords backing array, plus some runtime overhead. This output shows that the large string book was effectively garbage-collected.
+
+Interned strings
+Source: interning.go
+
+Have you noticed the word “beaucoup” being cloned several times, producing identical copies in memory?
+
+When using the new package unique, you know that identical words will become a single interned object:
+
+word := book[a:i]
+if word[0] == 'b' || word[0] == 'B' {
+    handle := unique.Make(word)
+    Bwords = append(Bwords, handle)
+}
+
+Calling mem() after the last use of books, and before the last use of Bwords, prints
+
+The program is now using 8 MiB
+8 MiB is the total size of the unique words starting with “B”, plus the size of Bwords (which contains many duplicate handles), plus some runtime overhead.
+
+The original very long string book has been effectively freed, because the implementation of unique.Make takes care of cloning any string you give to it! The interning pool does not reference the original string objects.
+
+Well, that’s true after a small fix to be shipped in Go 1.23.2. In the two initial patch releases of Go 1.23, the interning pool was keeping references to the original strings, which was not intended.
+
+Only strings?
+unique accepts any comparable object (comparable with ==) as input: numbers, strings, arrays, pointers, or your custom structs containing only comparable fields.
+
+String is the only comparable type that supports slicing, which must be handled with care by the unique package, in order to not accidentally keep a reference to a substring of a very large string. The other comparable types don’t have this slicing problem at all.
+
+The IP address struct type in the announcement blog post is a good example of what a custom type we’d want to intern.
+
+Servers, and more
+A common use case for processing similar strings over and over is a stateful web server, which may be running for several weeks. When the requests hitting your service consist of structured data with a lot of similarities, interning may help you keep the memory usage lower, run more frugal instances, fewer instances, and save money.
+
+More generally, any execution environment (batch jobs, embedded systems, etc.) where memory is a precious resource can benefit from interning objects.
+
+Golang
+Go
+Performance
+Memory Management
+Gcp App Dev
+732
+
+
+5
+
+
+
+
+Google Cloud - Community
+Published in Google Cloud - Community
+60K Followers
+·
+Last published 22 hours ago
+A collection of technical articles and blogs published or curated by Google Cloud Developer Advocates. The views expressed are those of the authors and don't necessarily reflect those of Google.
+
+Following
+Val Deleplace
+Written by Val Deleplace
+737 Followers
+·
+15 Following
+Engineer on cloudy things @Google. Opinions my own. Twitter @val_deleplace
+
+Follow
+Responses (5)
+Takash Futada
+Takash Futada
+﻿
+
+Cancel
+Respond
+Respond
+
+Also publish to my profile
+
+Hanif Maliki Dewanto
+Hanif Maliki Dewanto
+
+22 days ago
+
+
+Interesting post! Does the unique package handle all types of comparable objects, or are there any limitations when it comes to certain types like custom structs with non-comparable fields?
+1
+
+
+1 reply
+
+Reply
+
+Tom Anderson
+Tom Anderson
+
+about 1 month ago
+
+
+I used the package name “unique” for my internal library for generating unique random data for unit tests. It’s interesting that it’s used here in an almost opposite meaning, combining primitives that aren’t unique to reduce memory.
+1
+
+Reply
+
+Roman Sheremeta
+Roman Sheremeta
+
+about 2 months ago
+
+
+Thanks for sharing the explanation, appreciate it!!
+Also, do I understand correctly that this unique stuff is basically the same thing as the following example I've made with maps : https://go.dev/play/p/4ejHl_LRAAF ?
+If so, then I doubt what's the unique benefit of this unique pkg..
+1
+
+
+1 reply
+
+Reply
+
+See all responses
+More from the list: "Golang"
+Curated by
+
+Takash Futada
+
+The Ordinary Programmer
+In
+
+The Ordinary Programmer
+
+by
+
+huizhou92
+
+BigCache: High-Performance Memory Caching in Go
+
+·
+Dec 5, 2024
+
+Breaking Tech
+In
+
+Breaking Tech
+
+by
+
+SHIVAM SOURAV JHA
+
+Streaming Instead of Making Users Wait: A tryst in Golang
+
+·
+Oct 15, 2024
+
+Towards Dev
+In
+
+Towards Dev
+
+by
+
+kerstan
+
+Golang’s New Proposal for the Encoding or Json or V2 Package — Code Thursday
+
+·
+Oct 1, 2024
+
+Yash
+Yash
+
+Go One Billion Row Challenge — From 15 Minutes to 5 Seconds
+
+·
+Oct 8, 2024
+
+Sharyash
+Sharyash
+
+Solving CPU throttling issue in Golang applications before hitting the CPU limit in Kubernetes.
+Apr 25, 2024
+
+Salim Amine Bou Aram
+Salim Amine Bou Aram
+
+Low-Level Networking with Golang
+
+·
+Sep 26, 2024
+
+Aditi Mishra
+Aditi Mishra
+
+Best practices in Go to improve performance and reduce pressure on Go’s garbage collector
+Sep 21, 2024
+
+Salim Amine Bou Aram
+Salim Amine Bou Aram
+
+Golang encoding/json version 2
+
+·
+Sep 18, 2024
+
+ITNEXT
+In
+
+ITNEXT
+
+by
+
+Alex Pliutau
+
+Statically and Dynamically Linked Go Binaries
+Sep 9, 2024
+
+Radhakishan Surwase
+Radhakishan Surwase
+
+Efficient Concurrency in Go: A Deep Dive into the Worker Pool Pattern for Batch Processing
+Apr 5, 2024
+
+
+
+View list
+
+More from Val Deleplace and Google Cloud - Community
+Faster results with Short query optimized mode in BigQuery
+Google Cloud - Community
+In
+
+Google Cloud - Community
+
+by
+
+Val Deleplace
+
+Faster results with Short query optimized mode in BigQuery
+Google Cloud BigQuery is best in class for querying petabytes of data in a handful of seconds. Of course, you can query small data as well…
+Dec 18, 2024
+20
+
+
+Confidential AI: The Next Big Thing in Artificial Intelligence
+Google Cloud - Community
+In
+
+Google Cloud - Community
+
+by
+
+Mohit Sewak, Ph.D.
+
+Confidential AI: The Next Big Thing in Artificial Intelligence
+Why Microsoft, Google, AMD, Intel and all other Technology giants are Racing to Dominate This Emerging Field? (and Why You Should Care)?
+Dec 31, 2024
+100
+
+
+Let’s talk about Responsible AI in the context of Gemini 2.0!
+Google Cloud - Community
+In
+
+Google Cloud - Community
+
+by
+
+Mohit Sewak, Ph.D.
+
+Gemini 2.0 : The most important advancement in Google’s new AI Model… that everyone missed!
+Google’s Responsible AI Efforts in Gemini 2.0. Why not many are talking about this, and why we should?
+Dec 23, 2024
+51
+1
+
+
+Cutting cost: stopping the Cloud SQL instance is not enough!
+Google Cloud - Community
+In
+
+Google Cloud - Community
+
+by
+
+Val Deleplace
+
+Cutting cost: stopping the Cloud SQL instance is not enough!
+If you know me, you know I love paying less. Who doesn’t? When you look at the Google Cloud Free Tier page, you’ll notice that BigQuery has…
+Mar 9, 2023
+68
+
+
+See all from Val Deleplace
+See all from Google Cloud - Community
+Recommended from Medium
+Go vs. Rust: Web Service Performance
+Dmytro Misik
+Dmytro Misik
+
+Go vs. Rust: Web Service Performance
+Which Handles Heavy Traffic Better?
+Dec 6, 2024
+275
+16
+
+
+Exploring Go 1.24: What’s New and Why It Matters
+Stefanie Lai
+Stefanie Lai
+
+Exploring Go 1.24: What’s New and Why It Matters
+A Preview of Go 1.24 Innovations
+
+Jan 7
+70
+2
+
+
+Lists
+
+
+
+General Coding Knowledge
+20 stories
+·
+1861 saves
+
+
+A rusty, abandoned ship, listing to one side. Representative of the author’s state of mind at the beginning of the story.
+A Guide to Choosing, Planning, and Achieving Personal Goals
+13 stories
+·
+2285 saves
+
+
+Staff picks
+798 stories
+·
+1566 saves
+Implementing a Generic Repository Pattern in Golang Applications
+Septio Nugroho
+Septio Nugroho
+
+Implementing a Generic Repository Pattern in Golang Applications
+In software development, managing data access is a crucial part of building maintainable and scalable applications. One of the design…
+Dec 8, 2024
+46
+2
+
+
+Video Streaming with Go
+Dev Genius
+In
+
+Dev Genius
+
+by
+
+Cheikh seck
+
+Video Streaming with Go
+A brief guide about implementing a video stream with Go
+Dec 31, 2024
+271
+1
+
+
+Mastering Structs and Interfaces in Go
+hprog99
+In
+
+hprog99
+
+by
+
+Hiten Pratap Singh
+
+Mastering Structs and Interfaces in Go
+Go (often referred to as Golang) is a statically typed, compiled programming language designed and developed by Google. One of Go’s most…
+Dec 31, 2024
+43
+2
+
+
+Errors, Errors Everywhere: How We Centralized and Structured Error Handling in Go
+Connectly AI
+In
+
+Connectly AI
+
+by
+
+Oliver Nguyen
+
+Errors, Errors Everywhere: How We Centralized and Structured Error Handling in Go
+Handling errors in Go is simple and flexible — yet no structure!
+Dec 5, 2024
+55
+
+
+See more recommendations
+Help
+
+Status
+
+About
+
+Careers
+
+Press
+
+Blog
+
+Privacy
+
+Terms
+
+Text to speech
+
+Teams
