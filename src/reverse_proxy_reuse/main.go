@@ -1,3 +1,4 @@
+// https://medium.com/@abhinavv.singh/reverse-proxy-in-go-handling-millions-of-traffic-seamlessly-a76b12d49494
 package main
 
 import (
@@ -26,9 +27,11 @@ func mustParseURL(rawURL string) *url.URL {
 // ProxyHandler routes requests to pre-initialized proxies
 // high order function that returns a http.HandlerFunc that routes requests to pre-initialized proxies
 func ProxyHandler(backends map[string]*Backend) http.HandlerFunc {
+	// Return the handler function with the given pre-initialized backends
 	return func(w http.ResponseWriter, r *http.Request) {
 		for prefix, backend := range backends {
 			if strings.HasPrefix(r.URL.Path, prefix) { // Safe prefix check
+				// also cache the response with the path as the key
 				backend.Proxy.ServeHTTP(w, r)
 				return
 			}
