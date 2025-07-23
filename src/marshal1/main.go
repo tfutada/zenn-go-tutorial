@@ -11,19 +11,21 @@ type Person struct {
 	Age  int    `json:"age"`
 }
 
+// deserializeJSON is a function that takes a JSON byte slice and unmarshals it into a Person struct.
 func main() {
 	// JSON data (as a string for this example)
 	jsonStr := `{"name":"Alice","age":25}`
+	jsonBytes := []byte(jsonStr)
 
 	// Create a Person struct to hold the deserialized data
-	var person Person
+	var tPerson Person
 
 	// Deserialize JSON to struct with v2 semantics
-	err := json.Unmarshal([]byte(jsonStr), &person)
+	err := json.Unmarshal(jsonBytes, &tPerson)
 	if err != nil {
 		log.Fatal("Error deserializing JSON:", err)
 	}
 
 	// Print the deserialized struct
-	fmt.Printf("Deserialized: %+v\n", person)
+	fmt.Printf("Deserialized: %+v\n", tPerson)
 }
