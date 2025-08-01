@@ -12,15 +12,27 @@ type Post struct {
 	Title  string `json:"title"`
 	Body   string `json:"body"`
 }
+type ErrorMessage struct {
+	// Message is the error message returned by the API
+	// NB. jsonplaceholder.typicode.com does not return error messages
+	Message string `json:"message"`
+}
 
 func main() {
+
 	client := req.NewClient()
 	var posts []Post
+	var errMsg ErrorMessage
 
 	start := time.Now()
-	resp, err := client.R().
+	resp, err := client.
+		SetTimeout(10 * time.Second).
+		R().
+		EnableDumpWithoutHeader().
 		SetSuccessResult(&posts).
+		SetErrorResult(&errMsg).
 		Get("https://jsonplaceholder.typicode.com/posts")
+
 	duration := time.Since(start)
 	fmt.Printf("Fetch duration: %v\n", duration)
 
@@ -31,6 +43,7 @@ func main() {
 
 	if resp.IsErrorState() {
 		fmt.Println("Request failed with status:", resp.Status)
+		fmt.Println(errMsg.Message) // Record error message returned.
 		return
 	}
 
