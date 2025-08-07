@@ -26,8 +26,11 @@ func main() {
 
 	start := time.Now()
 	resp, err := client.
-		SetTimeout(10 * time.Second).
+		SetTimeout(10*time.Second).
 		R().
+		SetRetryCount(2).
+		// Set the retry sleep interval with a commonly used algorithm: capped exponential backoff with jitter (https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/).
+		SetRetryBackoffInterval(1*time.Second, 5*time.Second).
 		EnableDumpWithoutHeader().
 		SetSuccessResult(&posts).
 		SetErrorResult(&errMsg).
