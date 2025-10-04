@@ -8,6 +8,7 @@ require (
 	github.com/google/gopacket v1.1.19
 	github.com/gosuri/uilive v0.0.4
 	github.com/imroc/req/v3 v3.54.0
+	github.com/sony/gobreaker/v2 v2.1.0
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.39.0
 	golang.org/x/sync v0.15.0
@@ -37,6 +38,7 @@ require (
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/cncf/xds/go v0.0.0-20240905190251-b4127c9b8d78 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/docker v27.3.1+incompatible // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
@@ -47,6 +49,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/go-redsync/redsync/v4 v4.13.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/pprof v0.0.0-20241017200806-017d972448fc // indirect
@@ -67,6 +70,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.53.0 // indirect
+	github.com/redis/go-redis/v9 v9.7.0 // indirect
 	github.com/refraction-networking/utls v1.7.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
