@@ -18,12 +18,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"io"
 	"os"
 	"runtime"
 	"runtime/pprof"
 	"sync"
-	"sync/errgroup"
 	"time"
 )
 
