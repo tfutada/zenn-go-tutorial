@@ -18,15 +18,18 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"io"
 	"os"
 	"runtime"
 	"runtime/pprof"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
+// Chunk represents a batch of lines read from the input file.
+// Each chunk contains a slice of line data and a sequence number for ordering.
 type Chunk struct {
 	// lines holds N byte-slices; each element is a standalone copy
 	// so workers can safely mutate it (e.g., parse/trim).
@@ -35,6 +38,8 @@ type Chunk struct {
 	seq int64
 }
 
+// Reset clears the chunk's line data and resets the slice length to zero,
+// preparing it for reuse from the sync.Pool without reallocating memory.
 func (c *Chunk) Reset() {
 	for i := range c.lines {
 		c.lines[i] = c.lines[i][:0]
@@ -44,10 +49,14 @@ func (c *Chunk) Reset() {
 
 // ---- Pools (reduce GC churn) ------------------------------------------------
 
+// byteBuf wraps a byte slice for pooling to reduce allocations.
 type byteBuf struct{ b []byte }
 
+// newByteBuf creates a new byteBuf with the specified initial capacity.
 func newByteBuf(capHint int) *byteBuf { return &byteBuf{b: make([]byte, 0, capHint)} }
 
+// Set copies src into the byteBuf's internal slice, growing capacity if needed.
+// Returns the copied slice which remains valid until the byteBuf is returned to the pool.
 func (bb *byteBuf) Set(src []byte) []byte {
 	// Ensure capacity; grow geometrically to reduce allocations.
 	if cap(bb.b) < len(src) {
@@ -58,6 +67,7 @@ func (bb *byteBuf) Set(src []byte) []byte {
 	return bb.b
 }
 
+// nextCap returns the next power-of-two capacity >= n to minimize reallocations.
 func nextCap(n int) int {
 	// simple growth (power-of-two-ish)
 	c := 1
@@ -67,11 +77,15 @@ func nextCap(n int) int {
 	return c
 }
 
+// Pools holds sync.Pool instances for reusing Chunk and byteBuf objects,
+// reducing GC pressure during high-throughput streaming operations.
 type Pools struct {
 	chunkPool sync.Pool // *Chunk
 	bytePool  sync.Pool // *byteBuf
 }
 
+// newPools creates a new Pools instance with pre-configured capacities
+// for chunk line slices and byte buffer hints.
 func newPools(chunkCapacity, byteCapHint int) *Pools {
 	return &Pools{
 		chunkPool: sync.Pool{
@@ -86,15 +100,24 @@ func newPools(chunkCapacity, byteCapHint int) *Pools {
 	}
 }
 
-func (p *Pools) getChunk() *Chunk  { return p.chunkPool.Get().(*Chunk) }
+// getChunk retrieves a Chunk from the pool for reuse.
+func (p *Pools) getChunk() *Chunk { return p.chunkPool.Get().(*Chunk) }
+
+// putChunk resets and returns a Chunk to the pool for future reuse.
 func (p *Pools) putChunk(c *Chunk) { c.Reset(); p.chunkPool.Put(c) }
-func (p *Pools) getBuf() *byteBuf  { return p.bytePool.Get().(*byteBuf) }
+
+// getBuf retrieves a byteBuf from the pool for reuse.
+func (p *Pools) getBuf() *byteBuf { return p.bytePool.Get().(*byteBuf) }
+
+// putBuf resets and returns a byteBuf to the pool for future reuse.
 func (p *Pools) putBuf(b *byteBuf) { b.b = b.b[:0]; p.bytePool.Put(b) }
 
 // ---- Reader (handles arbitrarily long lines) --------------------------------
 
-// readLines streams the file, batches into chunks, and sends to out.
-// Uses bufio.Reader.ReadLine to support >64KiB records.
+// readLines streams the input reader line-by-line, batching lines into chunks of
+// the specified size, and sends complete chunks to the output channel. It handles
+// arbitrarily long lines using bufio.Reader.ReadLine (supporting records >64KiB).
+// The function respects context cancellation and returns on EOF or error.
 func readLines(ctx context.Context, r io.Reader, out chan<- *Chunk, pools *Pools, chunkSize int) error {
 	br := bufio.NewReaderSize(r, 1<<20) // 1 MiB buffer; tune for your media
 	var seq int64
@@ -182,11 +205,15 @@ func readLines(ctx context.Context, r io.Reader, out chan<- *Chunk, pools *Pools
 
 // ---- Worker Pool ------------------------------------------------------------
 
+// Processor defines the interface for processing chunks of lines.
+// Implementations should be safe for concurrent use across multiple goroutines.
 type Processor interface {
 	ProcessChunk(c *Chunk, pools *Pools) error
 }
 
-// Example processor: trim spaces, count lines containing a substring (CPU-light).
+// ContainsCounter is an example Processor that trims whitespace from each line
+// and counts lines containing a specified substring. This is a CPU-light operation
+// suitable for demonstrating the worker pool pattern.
 type ContainsCounter struct {
 	needle []byte
 
@@ -194,6 +221,8 @@ type ContainsCounter struct {
 	total int64
 }
 
+// ProcessChunk processes a chunk by trimming whitespace from each line and counting
+// lines that contain the needle substring. Thread-safe for concurrent execution.
 func (cc *ContainsCounter) ProcessChunk(c *Chunk, pools *Pools) error {
 	var local int64
 	for _, line := range c.lines {
@@ -213,12 +242,17 @@ func (cc *ContainsCounter) ProcessChunk(c *Chunk, pools *Pools) error {
 	return nil
 }
 
+// Total returns the total count of matching lines processed so far.
+// Thread-safe for concurrent access.
 func (cc *ContainsCounter) Total() int64 {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 	return cc.total
 }
 
+// runWorkers spawns n worker goroutines that consume chunks from the input channel,
+// process them using the provided Processor, and return chunks to the pool.
+// Returns when all workers complete or on first error. Respects context cancellation.
 func runWorkers(ctx context.Context, in <-chan *Chunk, p Processor, pools *Pools, n int) error {
 	grp, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < n; i++ {
