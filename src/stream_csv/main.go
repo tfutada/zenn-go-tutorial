@@ -50,68 +50,60 @@ func (c *Chunk) Reset() {
 
 // ---- Pools (reduce GC churn) ------------------------------------------------
 
-// byteBuf wraps a byte slice for pooling to reduce allocations.
-type byteBuf struct{ b []byte }
+// Pools holds sync.Pool instance for reusing Chunk objects,
+// reducing GC pressure during high-throughput streaming operations.
+type Pools struct {
+	chunkPool sync.Pool // *Chunk
 
-// newByteBuf creates a new byteBuf with the specified initial capacity.
-func newByteBuf(capHint int) *byteBuf { return &byteBuf{b: make([]byte, 0, capHint)} }
-
-// Set copies src into the byteBuf's internal slice, growing capacity if needed.
-// Returns the copied slice which remains valid until the byteBuf is returned to the pool.
-func (bb *byteBuf) Set(src []byte) []byte {
-	// Ensure capacity; grow geometrically to reduce allocations.
-	if cap(bb.b) < len(src) {
-		bb.b = make([]byte, 0, nextCap(len(src)))
-	}
-	bb.b = bb.b[:len(src)]
-	copy(bb.b, src)
-	return bb.b
+	// Metrics to track pool efficiency
+	chunkAllocs int64 // New chunks allocated
+	chunkReuses int64 // Chunks reused from pool
+	mu          sync.Mutex
 }
 
-// nextCap returns the next power-of-two capacity >= n to minimize reallocations.
-func nextCap(n int) int {
-	// simple growth (power-of-two-ish)
-	c := 1
-	for c < n {
-		c <<= 1
+// newPools creates a new Pools instance with pre-configured capacity
+// for chunk line slices.
+func newPools(chunkCapacity int) *Pools {
+	p := &Pools{}
+	p.chunkPool.New = func() any {
+		// Track allocation
+		p.mu.Lock()
+		p.chunkAllocs++
+		p.mu.Unlock()
+		// Pre-size slice header to avoid frequent growth.
+		return &Chunk{lines: make([][]byte, 0, chunkCapacity)}
+	}
+	return p
+}
+
+// getChunk retrieves a Chunk from the pool for reuse.
+func (p *Pools) getChunk() *Chunk {
+	beforeAllocs := p.chunkAllocs
+	c := p.chunkPool.Get().(*Chunk)
+	// If chunkAllocs didn't increase, it was a reuse
+	if p.chunkAllocs == beforeAllocs {
+		p.mu.Lock()
+		p.chunkReuses++
+		p.mu.Unlock()
 	}
 	return c
 }
 
-// Pools holds sync.Pool instances for reusing Chunk and byteBuf objects,
-// reducing GC pressure during high-throughput streaming operations.
-type Pools struct {
-	chunkPool sync.Pool // *Chunk
-	bytePool  sync.Pool // *byteBuf
-}
-
-// newPools creates a new Pools instance with pre-configured capacities
-// for chunk line slices and byte buffer hints.
-func newPools(chunkCapacity, byteCapHint int) *Pools {
-	return &Pools{
-		chunkPool: sync.Pool{
-			New: func() any {
-				// Pre-size slice header to avoid frequent growth.
-				return &Chunk{lines: make([][]byte, 0, chunkCapacity)}
-			},
-		},
-		bytePool: sync.Pool{
-			New: func() any { return newByteBuf(byteCapHint) },
-		},
-	}
-}
-
-// getChunk retrieves a Chunk from the pool for reuse.
-func (p *Pools) getChunk() *Chunk { return p.chunkPool.Get().(*Chunk) }
-
 // putChunk resets and returns a Chunk to the pool for future reuse.
 func (p *Pools) putChunk(c *Chunk) { c.Reset(); p.chunkPool.Put(c) }
 
-// getBuf retrieves a byteBuf from the pool for reuse.
-func (p *Pools) getBuf() *byteBuf { return p.bytePool.Get().(*byteBuf) }
-
-// putBuf resets and returns a byteBuf to the pool for future reuse.
-func (p *Pools) putBuf(b *byteBuf) { b.b = b.b[:0]; p.bytePool.Put(b) }
+// Stats returns pool efficiency metrics.
+func (p *Pools) Stats() (allocs, reuses int64, reuseRate float64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	allocs = p.chunkAllocs
+	reuses = p.chunkReuses
+	total := allocs + reuses
+	if total > 0 {
+		reuseRate = float64(reuses) / float64(total) * 100
+	}
+	return
+}
 
 // ---- Reader (handles arbitrarily long lines) --------------------------------
 
@@ -174,11 +166,9 @@ func readLines(ctx context.Context, r io.Reader, out chan<- *Chunk, pools *Pools
 				acc = line
 			}
 
-			// Copy into a pooled buffer (so downstream can mutate).
-			b := pools.getBuf()
-			copied := b.Set(acc)
-			// NOTE: we store the slice; on release we return the *byteBuf to the pool.
-			// To keep a mapping, we'll attach the buf via a zero-length trick at end.
+			// Copy line data (so downstream can mutate).
+			copied := make([]byte, len(acc))
+			copy(copied, acc)
 			ch.lines = append(ch.lines, copied)
 		}
 
@@ -236,10 +226,6 @@ func (cc *ContainsCounter) ProcessChunk(c *Chunk, pools *Pools) error {
 		if len(cc.needle) == 0 || bytes.Contains(line, cc.needle) {
 			local++
 		}
-		// release backing buffer of this line by returning a *byteBuf to pool
-		// We can't directly return here because we hid the *byteBuf.
-		// A simple strategy: since we copied into fresh []byte each time, we just let GC handle it.
-		// If you *must* pool each line buffer, carry a parallel slice of *byteBuf handles.
 	}
 	cc.mu.Lock()
 	cc.total += local
@@ -289,7 +275,6 @@ func main() {
 	workers := flag.Int("workers", runtime.NumCPU(), "number of worker goroutines")
 	linesPerChunk := flag.Int("lines-per-chunk", 10000, "batch size")
 	find := flag.String("contains", "", "optional: count lines containing this substring (case-sensitive)")
-	bufCap := flag.Int("bufcap", 64*1024, "initial per-line byte buffer capacity hint")
 	queue := flag.Int("queue", 2, "bounded queue capacity (backpressure)")
 	cpuprof := flag.String("cpuprof", "", "optional: write CPU profile to file")
 	flag.Parse()
@@ -324,7 +309,7 @@ func main() {
 
 	start := time.Now()
 	linesCh := make(chan *Chunk, *queue)
-	pools := newPools(*linesPerChunk, *bufCap)
+	pools := newPools(*linesPerChunk)
 
 	// Processor example with CPU-intensive regex (compiles on each line)
 	processor := &ContainsCounter{needle: []byte(*find)}
@@ -352,9 +337,14 @@ func main() {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
+	// Pool efficiency stats
+	allocs, reuses, reuseRate := pools.Stats()
+
 	fmt.Printf("Done in %s\n", elapsed.Truncate(10*time.Millisecond))
 	fmt.Printf("Workers=%d LinesPerChunk=%d Queue=%d\n", *workers, *linesPerChunk, *queue)
 	fmt.Printf("Total-matching-lines: %d (needle=%q)\n", processor.Total(), *find)
 	fmt.Printf("Alloc=%.1fMB Sys=%.1fMB NumGC=%d\n",
 		float64(m.Alloc)/1024/1024, float64(m.Sys)/1024/1024, m.NumGC)
+	fmt.Printf("Pool: Chunks-allocated=%d Chunks-reused=%d Reuse-rate=%.1f%%\n",
+		allocs, reuses, reuseRate)
 }
