@@ -1,4 +1,4 @@
-// go run main.go -in /path/to/huge.csv -workers 8 -chunk 10000
+// go run main.go -in /path/to/huge.csv -workers 8 -lines-per-chunk 10000
 //
 // Pattern distilled from "How to handle gigantic files in Go":
 // - stream the file (never load all into memory)
@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"runtime"
 	"runtime/pprof"
 	"sync"
@@ -211,9 +212,9 @@ type Processor interface {
 	ProcessChunk(c *Chunk, pools *Pools) error
 }
 
-// ContainsCounter is an example Processor that trims whitespace from each line
-// and counts lines containing a specified substring. This is a CPU-light operation
-// suitable for demonstrating the worker pool pattern.
+// ContainsCounter is an example Processor that trims whitespace from each line,
+// performs regex replacement to simulate CPU-intensive work, and counts lines
+// containing a specified substring.
 type ContainsCounter struct {
 	needle []byte
 
@@ -221,13 +222,17 @@ type ContainsCounter struct {
 	total int64
 }
 
-// ProcessChunk processes a chunk by trimming whitespace from each line and counting
-// lines that contain the needle substring. Thread-safe for concurrent execution.
+// ProcessChunk processes a chunk by trimming whitespace from each line,
+// performing CPU-intensive regex compilation and replacement on each line,
+// and counting lines that contain the needle substring. Thread-safe for concurrent execution.
 func (cc *ContainsCounter) ProcessChunk(c *Chunk, pools *Pools) error {
 	var local int64
 	for _, line := range c.lines {
-		// simulate small per-line work
+		// CPU-intensive work: compile regex for EACH line (intentionally inefficient for demo)
 		line = bytes.TrimSpace(line)
+		re := regexp.MustCompile(`\d+`)
+		line = re.ReplaceAll(line, []byte("X"))
+
 		if len(cc.needle) == 0 || bytes.Contains(line, cc.needle) {
 			local++
 		}
@@ -282,7 +287,7 @@ func runWorkers(ctx context.Context, in <-chan *Chunk, p Processor, pools *Pools
 func main() {
 	inPath := flag.String("in", "", "input file path")
 	workers := flag.Int("workers", runtime.NumCPU(), "number of worker goroutines")
-	chunk := flag.Int("chunk", 10000, "lines per chunk (batch size)")
+	linesPerChunk := flag.Int("lines-per-chunk", 10000, "batch size")
 	find := flag.String("contains", "", "optional: count lines containing this substring (case-sensitive)")
 	bufCap := flag.Int("bufcap", 64*1024, "initial per-line byte buffer capacity hint")
 	queue := flag.Int("queue", 2, "bounded queue capacity (backpressure)")
@@ -319,9 +324,9 @@ func main() {
 
 	start := time.Now()
 	linesCh := make(chan *Chunk, *queue)
-	pools := newPools(*chunk, *bufCap)
+	pools := newPools(*linesPerChunk, *bufCap)
 
-	// Processor example
+	// Processor example with CPU-intensive regex (compiles on each line)
 	processor := &ContainsCounter{needle: []byte(*find)}
 
 	grp, ctx := errgroup.WithContext(ctx)
@@ -329,7 +334,7 @@ func main() {
 	// Producer
 	grp.Go(func() error {
 		defer close(linesCh)
-		return readLines(ctx, f, linesCh, pools, *chunk)
+		return readLines(ctx, f, linesCh, pools, *linesPerChunk)
 	})
 
 	// Consumers
@@ -348,7 +353,7 @@ func main() {
 	runtime.ReadMemStats(&m)
 
 	fmt.Printf("Done in %s\n", elapsed.Truncate(10*time.Millisecond))
-	fmt.Printf("Workers=%d Chunk=%d Queue=%d\n", *workers, *chunk, *queue)
+	fmt.Printf("Workers=%d LinesPerChunk=%d Queue=%d\n", *workers, *linesPerChunk, *queue)
 	fmt.Printf("Total-matching-lines: %d (needle=%q)\n", processor.Total(), *find)
 	fmt.Printf("Alloc=%.1fMB Sys=%.1fMB NumGC=%d\n",
 		float64(m.Alloc)/1024/1024, float64(m.Sys)/1024/1024, m.NumGC)
