@@ -18,8 +18,13 @@ func main() {
 	cache := Cache{data: make(map[string]weak.Pointer[User])}
 	u := &User{"Alice"}
 
+	// Add finalizer to make GC behavior visible
+	runtime.SetFinalizer(u, func(*User) {
+		fmt.Println("User finalizer called - object being collected")
+	})
+
 	cache.data["alice"] = weak.Make(u) // weak ref
-	longLived := []*User{u}            // strong ref stays forever
+	longLived := []*User{u}            // strong ref prevents GC
 
 	fmt.Println("Before GC - Strong ref exists:", longLived[0].Name)
 
@@ -39,7 +44,6 @@ func main() {
 	fmt.Println("\nRemoving strong reference...")
 	longLived = nil
 	runtime.GC()
-	runtime.GC() // Run GC twice to ensure collection
 
 	if ptr := cache.data["alice"].Value(); ptr != nil {
 		fmt.Println("Still alive:", ptr.Name)
