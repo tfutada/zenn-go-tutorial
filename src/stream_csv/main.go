@@ -24,6 +24,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -207,9 +208,7 @@ type Processor interface {
 // containing a specified substring.
 type ContainsCounter struct {
 	needle []byte
-
-	mu    sync.Mutex
-	total int64
+	total  atomic.Int64
 }
 
 // ProcessChunk processes a chunk by trimming whitespace from each line,
@@ -227,18 +226,14 @@ func (cc *ContainsCounter) ProcessChunk(c *Chunk, pools *Pools) error {
 			local++
 		}
 	}
-	cc.mu.Lock()
-	cc.total += local
-	cc.mu.Unlock()
+	cc.total.Add(local)
 	return nil
 }
 
 // Total returns the total count of matching lines processed so far.
 // Thread-safe for concurrent access.
 func (cc *ContainsCounter) Total() int64 {
-	cc.mu.Lock()
-	defer cc.mu.Unlock()
-	return cc.total
+	return cc.total.Load()
 }
 
 // runWorkers spawns n worker goroutines that consume chunks from the input channel,
