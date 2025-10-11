@@ -19,7 +19,7 @@ func main() {
 	u := &User{"Alice"}
 
 	cache.data["alice"] = weak.Make(u) // weak ref
-	longLived := []*User{u}             // strong ref stays forever
+	longLived := []*User{u}            // strong ref stays forever
 
 	fmt.Println("Before GC - Strong ref exists:", longLived[0].Name)
 
@@ -46,6 +46,4 @@ func main() {
 	} else {
 		fmt.Println("User has been garbage collected")
 	}
-
-	_ = longLived // Mark as used
 }
