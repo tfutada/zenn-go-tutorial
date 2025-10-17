@@ -380,7 +380,7 @@ func registerRestaurantTools(server *mcp.Server) {
 	// Tool: search_restaurants
 	searchTool := &mcp.Tool{
 		Name:        "search_restaurants",
-		Description: "Search for restaurants based on cuisine, location, dietary needs, and other filters. Returns a list of matching restaurants with ratings and availability.",
+		Description: "Search for restaurants based on cuisine, location, dietary needs, and other filters. Returns a list of matching restaurants with ratings and availability. WORKFLOW NOTE: Best used as part of the book_restaurant prompt workflow. Consider reading resource://user_preferences first for personalized results.",
 	}
 
 	searchHandler := func(ctx context.Context, request *mcp.CallToolRequest, input SearchRestaurantsInput) (*mcp.CallToolResult, SearchRestaurantsOutput, error) {
@@ -489,7 +489,7 @@ func registerRestaurantTools(server *mcp.Server) {
 	// Tool: create_reservation
 	reserveTool := &mcp.Tool{
 		Name:        "create_reservation",
-		Description: "Create a restaurant reservation. This is an action that should only be executed after user approval.",
+		Description: "Create a restaurant reservation. ⚠️ CRITICAL: This is a state-changing action. Only call this tool AFTER: (1) searching for options, (2) presenting choices to user, (3) receiving explicit user approval (e.g., user says 'yes', 'confirm', 'book it'). Never call this tool directly without user confirmation. This creates a real reservation.",
 	}
 
 	reserveHandler := func(ctx context.Context, request *mcp.CallToolRequest, input CreateReservationInput) (*mcp.CallToolResult, CreateReservationOutput, error) {
@@ -759,75 +759,92 @@ Location preference: %s
 Dietary requirements: %s
 Special occasion: %s
 
-WORKFLOW (follow these steps in order):
+⚠️ CRITICAL WORKFLOW - FOLLOW STRICTLY IN THIS EXACT ORDER:
 
-1. GATHER CONTEXT (Resources):
-   - Read resource://user_preferences to understand my dining history and preferences
-   - Read resource://dining_history to see my past reservations
-   - Use check_calendar tool to verify I'm available on %s at %s
+STEP 1 - GATHER CONTEXT (DO THIS FIRST, BEFORE ANY TOOL CALLS):
+   YOU MUST read these resources BEFORE proceeding to step 2:
+   - Read resource://user_preferences (to understand my dining preferences)
+   - Read resource://dining_history (to see my past reservations)
+   - Use check_calendar tool (to verify I'm available on %s at %s)
 
-2. SEARCH & EVALUATE (Tools):
-   - Use search_restaurants tool with:
+   ⚠️ DO NOT proceed to step 2 until you have read both resources and checked calendar.
+
+STEP 2 - SEARCH & EVALUATE:
+   Now use these tools in sequence:
+   - Call search_restaurants with:
      * cuisine: %s
      * location: %s
      * party_size: %s
      * dietary_filters: [%s]
-   
-   - For the top 3-5 restaurants found, use get_restaurant_reviews tool
-   
-   - Use check_availability tool for each restaurant on %s
-   
-   - Use get_distance_from_location tool to calculate travel time from user_home
 
-3. PRESENT OPTIONS:
-   - Show me 2-3 best matches with:
+   - For the top 3-5 restaurants found, call get_restaurant_reviews
+
+   - Call check_availability for each restaurant on %s
+
+   - Call get_distance_from_location to calculate travel time from user_home
+
+STEP 3 - PRESENT OPTIONS:
+   Show me 2-3 best matches with:
      * Name, rating, price range
      * Distance and estimated travel time
      * Available time slots (if %s not available, suggest alternatives)
      * Highlights from reviews
      * Confirmation they meet dietary needs: %s
      * Special services if this is a %s occasion
-   
-   - Format as a clear numbered list with key details
 
-4. WAIT FOR MY SELECTION:
-   - Ask me which restaurant I prefer
-   - DO NOT make any booking yet
-   - DO NOT call create_reservation tool yet
+   Format as a clear numbered list with key details.
 
-5. CONFIRM & BOOK (ONLY after my explicit approval):
-   - Confirm the details one more time
-   - Wait for me to say "yes", "confirm", "book it", or similar approval
-   
-   - Then use create_reservation tool with:
+   ⚠️ DO NOT PROCEED TO STEP 4 YET.
+
+STEP 4 - WAIT FOR MY SELECTION:
+   Ask me which restaurant I prefer.
+
+   ⚠️ CRITICAL: DO NOT call create_reservation
+   ⚠️ CRITICAL: DO NOT call any booking tools
+   ⚠️ CRITICAL: DO NOT make any reservations
+   ⚠️ WAIT for my response selecting a restaurant
+
+STEP 5 - CONFIRM & BOOK (ONLY AFTER MY EXPLICIT APPROVAL):
+   After I select a restaurant, confirm the details once more:
+   Ask: "Should I go ahead and book [restaurant name] for [party_size] people on [date] at [time]?"
+
+   ⚠️ ONLY if I say "yes", "confirm", "book it", "go ahead", or similar explicit approval:
+   - Call create_reservation with:
      * restaurant_id: [selected restaurant]
      * date: %s
      * time: %s
      * party_size: %s
      * special_requests: Include occasion (%s) and dietary needs (%s)
-   
-   - Use add_calendar_event tool:
+
+   - Call add_calendar_event:
      * title: "Dinner at [restaurant name]"
      * Include confirmation number in notes
      * reminders: ["1 day before", "2 hours before"]
-   
-   - Use send_confirmation tool:
+
+   - Call send_confirmation:
      * type: "email"
      * template: "restaurant_booking"
      * Include all reservation details
 
-6. FINAL SUMMARY:
+   ⚠️ If I say "no", "cancel", "wait", "let me think":
+   - DO NOT call any booking tools
+   - Ask what I'd like to do instead
+
+STEP 6 - FINAL SUMMARY:
    - Provide confirmation number
    - Restaurant contact info
    - Cancellation policy
    - Offer to help with anything else (parking, pre-ordering dessert, etc.)
 
-IMPORTANT RULES:
-- Always read resources BEFORE searching
-- Present options BEFORE booking
-- NEVER call create_reservation without explicit user approval
-- If user says "no" or "cancel", stop the workflow gracefully
-- Be conversational and helpful throughout`,
+⚠️ SAFETY RULES (NEVER VIOLATE THESE):
+1. NEVER call create_reservation without explicit user approval
+2. ALWAYS read resources BEFORE calling search_restaurants
+3. ALWAYS present options BEFORE booking
+4. ALWAYS wait for user confirmation before state-changing actions
+5. If uncertain whether user approved, ASK AGAIN - better to double-check than make unwanted reservation
+
+If you are uncertain at any point whether I've given approval, ASK AGAIN.
+Be conversational and helpful throughout, but ALWAYS respect the approval gates.`,
 			cuisine, partySize, date, time,
 			location, dietary, occasion,
 			date, time,
