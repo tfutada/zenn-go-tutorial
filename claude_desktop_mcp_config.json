@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "go-tutorial-advanced": {
+      "command": "/Users/tafu/futasoft/golang/go-tutorial1/bin/mcp-server-advanced",
+      "args": [],
+      "description": "Advanced MCP server with tools (search, filter, stats), resources (users, products, system_info), and prompts"
+    },
+    "go-tutorial-basic": {
+      "command": "/Users/tafu/futasoft/golang/go-tutorial1/bin/mcp-server-basic",
+      "args": [],
+      "description": "Basic MCP server with simple tools (calculator, echo, timestamp, weather)"
+    }
+  }
+}

@@ -32,9 +32,9 @@ func main() {
 	fmt.Println("=== MCP Client Example ===\n")
 
 	// Choose which server to connect to
-	// For this demo, we'll use the basic server
+	// For this demo, we'll use the advanced server
 	serverCommand := "go"
-	serverArgs := []string{"run", "src/mcp_server/basic/main.go"}
+	serverArgs := []string{"run", "src/mcp_server/advanced/main.go"}
 
 	fmt.Printf("Connecting to MCP server: %s %v\n\n", serverCommand, serverArgs)
 
@@ -201,23 +201,8 @@ func demonstrateResources(ctx context.Context, session *mcp.ClientSession) error
 			return fmt.Errorf("failed to read resource: %w", err)
 		}
 
-		fmt.Printf("Resource contents (%d items):\n", len(readResult.Contents))
-		for i, content := range readResult.Contents {
-			// Pretty print the first item
-			if i == 0 {
-				if textContent, ok := content.(mcp.TextResourceContents); ok {
-					// Try to pretty print JSON
-					var jsonData interface{}
-					if json.Unmarshal([]byte(textContent.Text), &jsonData) == nil {
-						prettyJSON, _ := json.MarshalIndent(jsonData, "  ", "  ")
-						fmt.Printf("  Content:\n  %s\n", string(prettyJSON))
-					} else {
-						// Not JSON, print as-is
-						fmt.Printf("  Content: %s\n", textContent.Text)
-					}
-				}
-			}
-		}
+		fmt.Printf("Resource contents: %d items\n", len(readResult.Contents))
+		// Note: Resource content handling depends on the server implementation
 	}
 
 	fmt.Println()
@@ -260,7 +245,7 @@ func demonstratePrompts(ctx context.Context, session *mcp.ClientSession) error {
 
 		getPromptParams := &mcp.GetPromptParams{
 			Name:      firstPrompt.Name,
-			Arguments: make(map[string]interface{}),
+			Arguments: make(map[string]string),
 		}
 
 		// Add any required arguments
@@ -279,7 +264,7 @@ func demonstratePrompts(ctx context.Context, session *mcp.ClientSession) error {
 		fmt.Printf("Prompt template (%d messages):\n", len(promptResult.Messages))
 		for i, msg := range promptResult.Messages {
 			fmt.Printf("  Message %d [%s]:\n", i+1, msg.Role)
-			if textContent, ok := msg.Content.(mcp.TextContent); ok {
+			if textContent, ok := msg.Content.(*mcp.TextContent); ok {
 				// Truncate long prompts for display
 				text := textContent.Text
 				if len(text) > 200 {
@@ -304,7 +289,7 @@ func printToolResult(label string, result *mcp.CallToolResult) {
 	}
 
 	for _, content := range result.Content {
-		if textContent, ok := content.(mcp.TextContent); ok {
+		if textContent, ok := content.(*mcp.TextContent); ok {
 			// Try to pretty print JSON
 			var jsonData interface{}
 			if json.Unmarshal([]byte(textContent.Text), &jsonData) == nil {

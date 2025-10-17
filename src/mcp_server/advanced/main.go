@@ -42,6 +42,42 @@ type User struct {
 	Role  string `json:"role"`
 }
 
+// Tool Input/Output types - the SDK uses these to automatically generate JSON schemas
+
+type SearchInput struct {
+	Query string `json:"query"`
+	Type  string `json:"type,omitempty"`
+}
+
+type SearchOutput struct {
+	Products     []Product `json:"products,omitempty"`
+	ProductCount int       `json:"product_count,omitempty"`
+	Users        []User    `json:"users,omitempty"`
+	UserCount    int       `json:"user_count,omitempty"`
+}
+
+type FilterInput struct {
+	MinPrice *float64 `json:"min_price,omitempty"`
+	MaxPrice *float64 `json:"max_price,omitempty"`
+	Category *string  `json:"category,omitempty"`
+	InStock  *bool    `json:"in_stock,omitempty"`
+}
+
+type FilterOutput struct {
+	FilteredProducts []Product              `json:"filtered_products"`
+	Count            int                    `json:"count"`
+	FiltersApplied   map[string]interface{} `json:"filters_applied"`
+}
+
+type StatsInput struct {
+	Metric string `json:"metric"`
+}
+
+type StatsOutput struct {
+	Products map[string]interface{} `json:"products,omitempty"`
+	Users    map[string]interface{} `json:"users,omitempty"`
+}
+
 var (
 	// In-memory storage for demonstration
 	products []Product
@@ -125,37 +161,17 @@ func loadData() {
 func registerSearchTool(server *mcp.Server) {
 	tool := &mcp.Tool{
 		Name:        "search",
-		Description: "Search for items by name or description across products and users",
-		InputSchema: mcp.ToolInputSchema{
-			Type: "object",
-			Properties: map[string]interface{}{
-				"query": map[string]interface{}{
-					"type":        "string",
-					"description": "Search query string",
-				},
-				"type": map[string]interface{}{
-					"type":        "string",
-					"description": "Type of items to search",
-					"enum":        []string{"all", "products", "users"},
-				},
-			},
-			Required: []string{"query"},
-		},
+		Description: "Search for items by name or description across products and users. Use 'type' parameter to filter: 'all' (default), 'products', or 'users'",
 	}
 
-	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		query, ok := request.Params.Arguments["query"].(string)
-		if !ok {
-			return nil, fmt.Errorf("query must be a string")
-		}
-		query = strings.ToLower(query)
-
-		searchType := "all"
-		if t, exists := request.Params.Arguments["type"]; exists {
-			searchType, _ = t.(string)
+	handler := func(ctx context.Context, request *mcp.CallToolRequest, input SearchInput) (*mcp.CallToolResult, SearchOutput, error) {
+		query := strings.ToLower(input.Query)
+		searchType := input.Type
+		if searchType == "" {
+			searchType = "all"
 		}
 
-		results := make(map[string]interface{})
+		output := SearchOutput{}
 
 		// Search products
 		if searchType == "all" || searchType == "products" {
@@ -166,8 +182,8 @@ func registerSearchTool(server *mcp.Server) {
 					matchedProducts = append(matchedProducts, p)
 				}
 			}
-			results["products"] = matchedProducts
-			results["product_count"] = len(matchedProducts)
+			output.Products = matchedProducts
+			output.ProductCount = len(matchedProducts)
 		}
 
 		// Search users
@@ -179,17 +195,11 @@ func registerSearchTool(server *mcp.Server) {
 					matchedUsers = append(matchedUsers, u)
 				}
 			}
-			results["users"] = matchedUsers
-			results["user_count"] = len(matchedUsers)
+			output.Users = matchedUsers
+			output.UserCount = len(matchedUsers)
 		}
 
-		// Format response
-		jsonData, err := json.MarshalIndent(results, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal search results: %w", err)
-		}
-
-		return mcp.NewToolResultText(string(jsonData)), nil
+		return nil, output, nil
 	}
 
 	mcp.AddTool(server, tool, handler)
@@ -200,86 +210,39 @@ func registerFilterTool(server *mcp.Server) {
 	tool := &mcp.Tool{
 		Name:        "filter",
 		Description: "Filter products by various criteria (price range, category, availability)",
-		InputSchema: mcp.ToolInputSchema{
-			Type: "object",
-			Properties: map[string]interface{}{
-				"min_price": map[string]interface{}{
-					"type":        "number",
-					"description": "Minimum price (optional)",
-				},
-				"max_price": map[string]interface{}{
-					"type":        "number",
-					"description": "Maximum price (optional)",
-				},
-				"category": map[string]interface{}{
-					"type":        "string",
-					"description": "Category to filter by (optional)",
-				},
-				"in_stock": map[string]interface{}{
-					"type":        "boolean",
-					"description": "Filter by stock availability (optional)",
-				},
-			},
-		},
 	}
 
-	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args := request.Params.Arguments
-
-		// Parse filter criteria
-		var minPrice, maxPrice *float64
-		if v, ok := args["min_price"].(float64); ok {
-			minPrice = &v
-		}
-		if v, ok := args["max_price"].(float64); ok {
-			maxPrice = &v
-		}
-
-		var category *string
-		if v, ok := args["category"].(string); ok {
-			category = &v
-		}
-
-		var inStock *bool
-		if v, ok := args["in_stock"].(bool); ok {
-			inStock = &v
-		}
-
+	handler := func(ctx context.Context, request *mcp.CallToolRequest, input FilterInput) (*mcp.CallToolResult, FilterOutput, error) {
 		// Apply filters
 		var filtered []Product
 		for _, p := range products {
-			if minPrice != nil && p.Price < *minPrice {
+			if input.MinPrice != nil && p.Price < *input.MinPrice {
 				continue
 			}
-			if maxPrice != nil && p.Price > *maxPrice {
+			if input.MaxPrice != nil && p.Price > *input.MaxPrice {
 				continue
 			}
-			if category != nil && !strings.EqualFold(p.Category, *category) {
+			if input.Category != nil && !strings.EqualFold(p.Category, *input.Category) {
 				continue
 			}
-			if inStock != nil && p.InStock != *inStock {
+			if input.InStock != nil && p.InStock != *input.InStock {
 				continue
 			}
 			filtered = append(filtered, p)
 		}
 
-		result := map[string]interface{}{
-			"filtered_products": filtered,
-			"count":             len(filtered),
-			"filters_applied": map[string]interface{}{
-				"min_price": minPrice,
-				"max_price": maxPrice,
-				"category":  category,
-				"in_stock":  inStock,
+		output := FilterOutput{
+			FilteredProducts: filtered,
+			Count:            len(filtered),
+			FiltersApplied: map[string]interface{}{
+				"min_price": input.MinPrice,
+				"max_price": input.MaxPrice,
+				"category":  input.Category,
+				"in_stock":  input.InStock,
 			},
 		}
 
-		jsonData, err := json.MarshalIndent(result, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal filter results: %w", err)
-		}
-
-		return mcp.NewToolResultText(string(jsonData)), nil
+		return nil, output, nil
 	}
 
 	mcp.AddTool(server, tool, handler)
@@ -289,29 +252,13 @@ func registerFilterTool(server *mcp.Server) {
 func registerStatsTool(server *mcp.Server) {
 	tool := &mcp.Tool{
 		Name:        "stats",
-		Description: "Compute statistics about products and users",
-		InputSchema: mcp.ToolInputSchema{
-			Type: "object",
-			Properties: map[string]interface{}{
-				"metric": map[string]interface{}{
-					"type":        "string",
-					"description": "Type of statistics to compute",
-					"enum":        []string{"products", "users", "all"},
-				},
-			},
-			Required: []string{"metric"},
-		},
+		Description: "Compute statistics about products and users. Use metric: 'products', 'users', or 'all'",
 	}
 
-	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		metric, ok := request.Params.Arguments["metric"].(string)
-		if !ok {
-			return nil, fmt.Errorf("metric must be a string")
-		}
+	handler := func(ctx context.Context, request *mcp.CallToolRequest, input StatsInput) (*mcp.CallToolResult, StatsOutput, error) {
+		output := StatsOutput{}
 
-		stats := make(map[string]interface{})
-
-		if metric == "products" || metric == "all" {
+		if input.Metric == "products" || input.Metric == "all" {
 			var totalPrice float64
 			var inStockCount int
 			categories := make(map[string]int)
@@ -329,35 +276,30 @@ func registerStatsTool(server *mcp.Server) {
 				avgPrice = totalPrice / float64(len(products))
 			}
 
-			stats["products"] = map[string]interface{}{
-				"total_count":       len(products),
-				"in_stock_count":    inStockCount,
-				"out_of_stock":      len(products) - inStockCount,
-				"average_price":     avgPrice,
-				"categories":        categories,
-				"category_count":    len(categories),
+			output.Products = map[string]interface{}{
+				"total_count":    len(products),
+				"in_stock_count": inStockCount,
+				"out_of_stock":   len(products) - inStockCount,
+				"average_price":  avgPrice,
+				"categories":     categories,
+				"category_count": len(categories),
 			}
 		}
 
-		if metric == "users" || metric == "all" {
+		if input.Metric == "users" || input.Metric == "all" {
 			roles := make(map[string]int)
 			for _, u := range users {
 				roles[u.Role]++
 			}
 
-			stats["users"] = map[string]interface{}{
+			output.Users = map[string]interface{}{
 				"total_count": len(users),
 				"roles":       roles,
 				"role_count":  len(roles),
 			}
 		}
 
-		jsonData, err := json.MarshalIndent(stats, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal stats: %w", err)
-		}
-
-		return mcp.NewToolResultText(string(jsonData)), nil
+		return nil, output, nil
 	}
 
 	mcp.AddTool(server, tool, handler)
@@ -370,64 +312,64 @@ func registerResources(server *mcp.Server) {
 		URI:         "resource://users",
 		Name:        "Users List",
 		Description: "Complete list of all users in the system",
-		MimeType:    "application/json",
+		MIMEType:    "application/json",
 	}
 
-	usersHandler := func(ctx context.Context, request mcp.ReadResourceRequest) ([]interface{}, error) {
+	usersHandler := func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		jsonData, err := json.MarshalIndent(users, "", "  ")
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal users: %w", err)
 		}
 
-		return []interface{}{
-			mcp.TextResourceContents{
-				ResourceContents: mcp.ResourceContents{
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
 					URI:      "resource://users",
-					MimeType: "application/json",
+					MIMEType: "application/json",
+					Text:     string(jsonData),
 				},
-				Text: string(jsonData),
 			},
 		}, nil
 	}
 
-	mcp.AddResource(server, usersResource, usersHandler)
+	server.AddResource(usersResource, usersHandler)
 
 	// Resource 2: Products list
 	productsResource := &mcp.Resource{
 		URI:         "resource://products",
 		Name:        "Products List",
 		Description: "Complete list of all products with pricing and availability",
-		MimeType:    "application/json",
+		MIMEType:    "application/json",
 	}
 
-	productsHandler := func(ctx context.Context, request mcp.ReadResourceRequest) ([]interface{}, error) {
+	productsHandler := func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		jsonData, err := json.MarshalIndent(products, "", "  ")
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal products: %w", err)
 		}
 
-		return []interface{}{
-			mcp.TextResourceContents{
-				ResourceContents: mcp.ResourceContents{
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
 					URI:      "resource://products",
-					MimeType: "application/json",
+					MIMEType: "application/json",
+					Text:     string(jsonData),
 				},
-				Text: string(jsonData),
 			},
 		}, nil
 	}
 
-	mcp.AddResource(server, productsResource, productsHandler)
+	server.AddResource(productsResource, productsHandler)
 
 	// Resource 3: System info
 	systemResource := &mcp.Resource{
 		URI:         "resource://system_info",
 		Name:        "System Information",
 		Description: "Current system status and metadata",
-		MimeType:    "application/json",
+		MIMEType:    "application/json",
 	}
 
-	systemHandler := func(ctx context.Context, request mcp.ReadResourceRequest) ([]interface{}, error) {
+	systemHandler := func(ctx context.Context, request *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		info := map[string]interface{}{
 			"server_name":    "advanced-mcp-server",
 			"version":        "1.0.0",
@@ -441,18 +383,18 @@ func registerResources(server *mcp.Server) {
 			return nil, fmt.Errorf("failed to marshal system info: %w", err)
 		}
 
-		return []interface{}{
-			mcp.TextResourceContents{
-				ResourceContents: mcp.ResourceContents{
+		return &mcp.ReadResourceResult{
+			Contents: []*mcp.ResourceContents{
+				{
 					URI:      "resource://system_info",
-					MimeType: "application/json",
+					MIMEType: "application/json",
+					Text:     string(jsonData),
 				},
-				Text: string(jsonData),
 			},
 		}, nil
 	}
 
-	mcp.AddResource(server, systemResource, systemHandler)
+	server.AddResource(systemResource, systemHandler)
 }
 
 // registerPrompts adds MCP prompts (reusable prompt templates)
@@ -461,7 +403,7 @@ func registerPrompts(server *mcp.Server) {
 	analyzePrompt := &mcp.Prompt{
 		Name:        "analyze_data",
 		Description: "Analyze the current product and user data to provide insights",
-		Arguments: []mcp.PromptArgument{
+		Arguments: []*mcp.PromptArgument{
 			{
 				Name:        "focus",
 				Description: "What aspect to focus on",
@@ -470,9 +412,9 @@ func registerPrompts(server *mcp.Server) {
 		},
 	}
 
-	analyzeHandler := func(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	analyzeHandler := func(ctx context.Context, request *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		focus := "general"
-		if f, ok := request.Params.Arguments["focus"].(string); ok {
+		if f, ok := request.Params.Arguments["focus"]; ok {
 			focus = f
 		}
 
@@ -493,11 +435,10 @@ Start by calling the stats tool with metric "all" to get comprehensive data.`,
 			focus, len(products), len(users))
 
 		return &mcp.GetPromptResult{
-			Messages: []mcp.PromptMessage{
+			Messages: []*mcp.PromptMessage{
 				{
 					Role: "user",
-					Content: mcp.TextContent{
-						Type: "text",
+					Content: &mcp.TextContent{
 						Text: promptText,
 					},
 				},
@@ -505,13 +446,13 @@ Start by calling the stats tool with metric "all" to get comprehensive data.`,
 		}, nil
 	}
 
-	mcp.AddPrompt(server, analyzePrompt, analyzeHandler)
+	server.AddPrompt(analyzePrompt, analyzeHandler)
 
 	// Prompt 2: Generate Report
 	reportPrompt := &mcp.Prompt{
 		Name:        "generate_report",
 		Description: "Generate a comprehensive report on products or users",
-		Arguments: []mcp.PromptArgument{
+		Arguments: []*mcp.PromptArgument{
 			{
 				Name:        "report_type",
 				Description: "Type of report to generate (products, users, or inventory)",
@@ -520,10 +461,10 @@ Start by calling the stats tool with metric "all" to get comprehensive data.`,
 		},
 	}
 
-	reportHandler := func(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-		reportType, ok := request.Params.Arguments["report_type"].(string)
+	reportHandler := func(ctx context.Context, request *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		reportType, ok := request.Params.Arguments["report_type"]
 		if !ok {
-			return nil, fmt.Errorf("report_type is required and must be a string")
+			return nil, fmt.Errorf("report_type is required")
 		}
 
 		var promptText string
@@ -555,11 +496,10 @@ Start by calling the stats tool with metric "all" to get comprehensive data.`,
 		}
 
 		return &mcp.GetPromptResult{
-			Messages: []mcp.PromptMessage{
+			Messages: []*mcp.PromptMessage{
 				{
 					Role: "user",
-					Content: mcp.TextContent{
-						Type: "text",
+					Content: &mcp.TextContent{
 						Text: promptText,
 					},
 				},
@@ -567,5 +507,5 @@ Start by calling the stats tool with metric "all" to get comprehensive data.`,
 		}, nil
 	}
 
-	mcp.AddPrompt(server, reportPrompt, reportHandler)
+	server.AddPrompt(reportPrompt, reportHandler)
 }
