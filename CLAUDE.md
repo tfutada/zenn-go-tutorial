@@ -68,6 +68,21 @@ go build -gcflags="-N -l" src/<example-name>/main.go
 go build -gcflags="-m" src/<example-name>/main.go
 ```
 
+### MCP Servers
+```bash
+# Run the basic MCP server
+go run src/mcp_server/basic/main.go
+
+# Run the advanced MCP server
+go run src/mcp_server/advanced/main.go
+
+# Test with the MCP client (in a separate terminal)
+go run src/mcp_client/main.go
+
+# Install MCP SDK (if needed)
+go get github.com/modelcontextprotocol/go-sdk
+```
+
 ## Key Architecture Patterns
 
 ### Concurrency Patterns
@@ -107,6 +122,12 @@ go build -gcflags="-m" src/<example-name>/main.go
 - **Hash Maps**: `hash_map`
 - **One Billion Row Challenge**: Multiple implementations in `one_billion_challenge/`
 
+### MCP (Model Context Protocol) Servers
+- **Basic Server**: `mcp_server/basic` - Simple MCP server with tools (calculator, echo, timestamp, weather)
+- **Advanced Server**: `mcp_server/advanced` - Sophisticated server with tools, resources, and prompts
+- **Architecture**: Stdio transport for local tools, JSON-RPC communication
+- **Use Cases**: AI tool integration, Claude Desktop integration, custom LLM workflows
+
 ## Key Dependencies
 
 - **HTTP Client**: `github.com/go-resty/resty/v2`, `github.com/imroc/req/v3`
@@ -115,6 +136,7 @@ go build -gcflags="-m" src/<example-name>/main.go
 - **Packet Capture**: `github.com/google/gopacket`
 - **Circuit Breaker**: `github.com/sony/gobreaker/v2`
 - **Data Pipeline**: `github.com/apache/beam/sdks/v2`
+- **MCP SDK**: `github.com/modelcontextprotocol/go-sdk`
 
 ## Development Notes
 

@@ -31,9 +31,9 @@ import (
 // Input/Output types for tools - the SDK uses these to automatically generate JSON schemas
 
 type CalculatorInput struct {
-	Operation string   `json:"operation" jsonschema:"enum=add,enum=subtract,enum=multiply,enum=divide,enum=power,enum=sqrt,description=The operation to perform"`
-	A         float64  `json:"a" jsonschema:"description=First operand"`
-	B         *float64 `json:"b,omitempty" jsonschema:"description=Second operand (not required for sqrt)"`
+	Operation string   `json:"operation"`
+	A         float64  `json:"a"`
+	B         *float64 `json:"b,omitempty"`
 }
 
 type CalculatorOutput struct {
@@ -41,8 +41,8 @@ type CalculatorOutput struct {
 }
 
 type EchoInput struct {
-	Text      string `json:"text" jsonschema:"description=The text to echo"`
-	Transform string `json:"transform,omitempty" jsonschema:"enum=none,enum=uppercase,enum=lowercase,enum=reverse,enum=word_count,description=Optional transformation to apply"`
+	Text      string `json:"text"`
+	Transform string `json:"transform,omitempty"`
 }
 
 type EchoOutput struct {
@@ -50,7 +50,7 @@ type EchoOutput struct {
 }
 
 type TimestampInput struct {
-	Format string `json:"format" jsonschema:"enum=unix,enum=iso8601,enum=rfc3339,enum=human,description=Format for the timestamp"`
+	Format string `json:"format"`
 }
 
 type TimestampOutput struct {
@@ -58,8 +58,8 @@ type TimestampOutput struct {
 }
 
 type WeatherInput struct {
-	City  string `json:"city" jsonschema:"description=Name of the city"`
-	Units string `json:"units,omitempty" jsonschema:"enum=celsius,enum=fahrenheit,description=Temperature units"`
+	City  string `json:"city"`
+	Units string `json:"units,omitempty"`
 }
 
 type WeatherOutput struct {
