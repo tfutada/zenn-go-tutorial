@@ -9,6 +9,11 @@
       "command": "/Users/tafu/futasoft/golang/go-tutorial1/bin/mcp-server-basic",
       "args": [],
       "description": "Basic MCP server with simple tools (calculator, echo, timestamp, weather)"
+    },
+    "go-tutorial-restaurant": {
+      "command": "/Users/tafu/futasoft/golang/go-tutorial1/bin/mcp-server-restaurant",
+      "args": [],
+      "description": "Restaurant booking MCP server with Voice + MCP integration pattern - tools for search/book/reviews, calendar integration, resources for user preferences/history, and orchestrated booking workflow prompt"
     }
   }
 }
