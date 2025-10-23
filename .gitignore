@@ -6,3 +6,26 @@ cpu.pprof
 output.txt
 
 .idea
+
+# Tool-specific directories
+.claude/
+.serena/
+
+# OS-specific files
+.DS_Store
+
+# Build artifacts and binaries
+bin/
+*.test
+
+# Profiling and debug files
+*.prof
+*.pprof
+*.svg
+cpu_profile.svg
+
+# Temporary test files
+newfile.txt
+src/*/outputs/
+src/stream_csv/*.csv
+src/stream_csv/*.sh
