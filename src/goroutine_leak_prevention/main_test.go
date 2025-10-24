@@ -118,7 +118,7 @@ func BenchmarkContextOverhead(b *testing.B) {
 	b.Run("WithContext", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			_, cancel := context.WithTimeout(context.Background(), time.Second)
 			cancel()
 		}
 	})

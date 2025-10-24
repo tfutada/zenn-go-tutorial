@@ -138,7 +138,7 @@ func printGoroutineCount(label string) {
 }
 
 func main() {
-	fmt.Println("=== Goroutine Leak Prevention Examples ===\n")
+	fmt.Println("=== Goroutine Leak Prevention Examples ===")
 
 	// Example 1: Context-based cancellation
 	fmt.Println("1. Context-Based Cancellation:")
