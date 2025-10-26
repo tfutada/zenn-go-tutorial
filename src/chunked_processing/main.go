@@ -39,7 +39,7 @@ func processLogsNaive(logs []string) []LogEntry {
 // ✅ GOOD: Process in chunks with fixed memory footprint
 func processLogsChunked(logs []string, chunkSize int, process func([]LogEntry)) {
 	chunk := make([]LogEntry, 0, chunkSize)
-	
+
 	for i, log := range logs {
 		parts := strings.Split(log, "|")
 		if len(parts) >= 3 {
@@ -116,7 +116,7 @@ func processLogsConcurrent(ctx context.Context, logs []string, chunkSize int, nu
 // ✅ BEST: Streaming chunked processing from reader
 func processLogsStreaming(reader *bufio.Reader, chunkSize int, process func([]LogEntry)) error {
 	chunk := make([]LogEntry, 0, chunkSize)
-	
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -142,11 +142,11 @@ func processLogsStreaming(reader *bufio.Reader, chunkSize int, process func([]Lo
 			chunk = chunk[:0]
 		}
 	}
-	
+
 	return nil
 }
 
-// Example processor: Count log levels
+// LogStats Example processor: Count log levels
 type LogStats struct {
 	mu     sync.Mutex
 	counts map[string]int
@@ -161,7 +161,7 @@ func NewLogStats() *LogStats {
 func (ls *LogStats) Process(entries []LogEntry) {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	
+
 	for _, entry := range entries {
 		ls.counts[entry.Level]++
 	}
@@ -170,7 +170,7 @@ func (ls *LogStats) Process(entries []LogEntry) {
 func (ls *LogStats) Print() {
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
-	
+
 	fmt.Println("Log Level Statistics:")
 	for level, count := range ls.counts {
 		fmt.Printf("  %s: %d\n", level, count)
@@ -181,12 +181,12 @@ func (ls *LogStats) Print() {
 func generateLogs(count int) []string {
 	levels := []string{"INFO", "WARN", "ERROR", "DEBUG"}
 	logs := make([]string, count)
-	
+
 	for i := 0; i < count; i++ {
 		level := levels[i%len(levels)]
 		logs[i] = fmt.Sprintf("2024-01-01T12:00:00|%s|Log message %d", level, i)
 	}
-	
+
 	return logs
 }
 
@@ -203,7 +203,8 @@ func printMemStats(label string) {
 }
 
 func main() {
-	fmt.Println("=== Chunked Processing Example ===\n")
+	fmt.Println("=== Chunked Processing Example ===")
+	fmt.Println()
 
 	// Generate test data
 	logs := generateLogs(100000)
@@ -213,7 +214,7 @@ func main() {
 	fmt.Println("1. Naive Approach (Process All at Once):")
 	runtime.GC()
 	printMemStats("Before")
-	
+
 	start := time.Now()
 	stats1 := NewLogStats()
 	results := processLogsNaive(logs)
@@ -233,7 +234,7 @@ func main() {
 	fmt.Println("2. Chunked Approach:")
 	runtime.GC()
 	printMemStats("Before")
-	
+
 	start = time.Now()
 	stats2 := NewLogStats()
 	processLogsChunked(logs, 1000, stats2.Process)
@@ -246,7 +247,7 @@ func main() {
 	fmt.Println("3. Concurrent Chunked Approach:")
 	runtime.GC()
 	printMemStats("Before")
-	
+
 	start = time.Now()
 	stats3 := NewLogStats()
 	ctx := context.Background()
@@ -260,17 +261,17 @@ func main() {
 	fmt.Println("4. Streaming Approach:")
 	runtime.GC()
 	printMemStats("Before")
-	
+
 	start = time.Now()
 	stats4 := NewLogStats()
-	
+
 	// Create a reader from string data
 	var buf bytes.Buffer
 	for _, log := range logs {
 		buf.WriteString(log + "\n")
 	}
 	reader := bufio.NewReader(&buf)
-	
+
 	processLogsStreaming(reader, 1000, stats4.Process)
 	fmt.Printf("Time: %v\n", time.Since(start))
 	printMemStats("After")
