@@ -2,9 +2,9 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -69,13 +69,19 @@ func BenchmarkProcessingStrategies(b *testing.B) {
 	b.Run("Streaming", func(b *testing.B) {
 		b.ReportAllocs()
 		stats := NewLogStats()
-		
+
+		// Preallocate builder outside benchmark loop (Chapter 3: Buffer Optimization)
+		var builder strings.Builder
+		estimatedSize := len(logs) * 50 // Estimate: avg log line ~50 bytes
+		builder.Grow(estimatedSize)
+
+		for _, log := range logs {
+			builder.WriteString(log + "\n")
+		}
+		data := builder.String()
+
 		for i := 0; i < b.N; i++ {
-			var buf bytes.Buffer
-			for _, log := range logs {
-				buf.WriteString(log + "\n")
-			}
-			reader := bufio.NewReader(&buf)
+			reader := bufio.NewReader(strings.NewReader(data))
 			processLogsStreaming(reader, 1000, stats.Process)
 		}
 	})

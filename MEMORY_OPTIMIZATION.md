@@ -128,6 +128,7 @@ go test -bench=. -benchmem src/chunked_processing/
 - Reset slices with `[:0]` to reuse capacity
 - Use worker pools for CPU-intensive work
 - Typical chunk sizes: 100-10,000 items
+- **Benchmark setup**: Move data preparation outside `b.N` loop, use preallocated `strings.Builder` (Chapter 3)
 
 **Code Pattern**:
 ```go
