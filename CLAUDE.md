@@ -102,9 +102,9 @@ go get github.com/modelcontextprotocol/go-sdk
 
 ### Performance & Optimization
 - **Benchmarking**: `benchmark/basics`, `benchmark/part1`, `benchmark/part2`
-- **Memory Optimization**: `pre_alloc`, `buffer1`, `memory_usage`, `interning`, `memory_optimization_guide`
+- **Memory Optimization**: `pre_alloc`, `buffer1`, `memory_usage`, `interning`, `memory_optimization_guide` — see `src/memory_optimization_guide/CLAUDE.md`
 - **Escape Analysis**: `memory/escape_analysis`
-- **String Optimization**: `string1`, `string2`, `strings1`, `string_join`
+- **String Optimization**: `string1`, `string2`, `strings1`, `string_join` — see `src/string_join/CLAUDE.md`
 - **GC Tuning**: `gc_tuning`
 - **Syscall Cost**: `syscall_cost`
 - **Chunked Processing**: `chunked_processing`
@@ -152,7 +152,9 @@ go get github.com/modelcontextprotocol/go-sdk
 ### MCP (Model Context Protocol)
 - **Basic Server**: `mcp_server/basic` - Simple MCP server with tools (calculator, echo, timestamp, weather)
 - **Advanced Server**: `mcp_server/advanced` - Sophisticated server with tools, resources, and prompts
-- **Basic Client**: `mcp_client` - Simple MCP client
+- **Restaurant Server**: `mcp_server/restaurant` - Voice + MCP integration demo — see `src/mcp_server/restaurant/CLAUDE.md`
+- **Server Guide**: Architecture, dev guide, Voice+MCP pattern — see `src/mcp_server/CLAUDE.md`
+- **Basic Client**: `mcp_client` - Simple MCP client — see `src/mcp_client/CLAUDE.md`
 - **Advanced Client**: `mcp_client_advanced` - Advanced MCP client
 - **Restaurant Client**: `mcp_client_restaurant` - Domain-specific MCP client example
 - **Architecture**: Stdio transport for local tools, JSON-RPC communication
