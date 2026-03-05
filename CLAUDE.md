@@ -70,8 +70,9 @@ go build -o output_binary src/<example-name>/main.go
 # Build with optimizations disabled (for debugging)
 go build -gcflags="-N -l" src/<example-name>/main.go
 
-# Escape analysis
-go build -gcflags="-m" src/<example-name>/main.go
+# Escape analysis (-l disables inlining for clearer output, -m=2 for more detail)
+go build -gcflags='-m -l' src/<example-name>/main.go
+go build -gcflags='all=-m -l' src/<example-name>/main.go  # includes dependencies
 ```
 
 ### MCP Servers & Clients
