@@ -1,9 +1,10 @@
 module tutorial1
 
-go 1.25.3
+go 1.26.1
 
 require (
 	github.com/apache/beam/sdks/v2 v2.68.0
+	github.com/bytedance/sonic v1.15.0
 	github.com/go-resty/resty/v2 v2.16.5
 	github.com/google/gopacket v1.1.19
 	github.com/gosuri/uilive v0.0.4
@@ -13,6 +14,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.42.0
 	golang.org/x/sync v0.17.0
+	golang.org/x/sys v0.36.0
 	golang.org/x/time v0.13.0
 )
 
@@ -33,7 +35,6 @@ require (
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/avast/retry-go/v4 v4.6.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
@@ -95,7 +96,6 @@ require (
 	golang.org/x/mod v0.28.0 // indirect
 	golang.org/x/net v0.44.0 // indirect
 	golang.org/x/oauth2 v0.30.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 	golang.org/x/tools v0.37.0 // indirect
 	google.golang.org/api v0.248.0 // indirect
