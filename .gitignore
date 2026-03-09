@@ -26,6 +26,7 @@ cpu_profile.svg
 
 # Temporary test files
 newfile.txt
+src/*/outputs
 src/*/outputs/
 src/stream_csv/*.csv
 src/stream_csv/*.sh
