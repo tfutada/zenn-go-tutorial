@@ -190,58 +190,144 @@ func demoNetpoller() {
 // This pins a goroutine to its current OS thread — no other goroutine can
 // run on that thread until UnlockOSThread is called.
 //
-// Use cases (rare):
-//   - CGo libraries requiring thread-local state (e.g., OpenGL)
-//   - Linux namespace operations (unshare, setns)
-//   - Ultra-low-latency paths on isolated CPUs
+// How it works in the G-M-P model:
+//   Normal:  G can move between Ms freely (scheduler decides)
+//   Locked:  G is bound to one M — that M is reserved exclusively
+//            Other Gs cannot use that M, and a new M may be spawned to compensate.
 //
-// For typical server workloads, Go's scheduler handles thread placement well
-// without manual intervention. Always benchmark before adopting.
+// Real-world use cases:
+//  1. CGo + thread-local state: C libraries (OpenGL, SQLite in certain modes)
+//     store state in thread-local storage (TLS). If Go migrates the goroutine
+//     to another thread, the C library sees different/uninitialized state → crash.
+//  2. Linux namespaces: unshare(2) and setns(2) operate on the calling thread.
+//     Without LockOSThread, the goroutine might resume on a different thread
+//     that's still in the original namespace.
+//  3. Ultra-low-latency: on bare metal with isolated CPUs (via isolcpus or cgroups),
+//     pinning avoids scheduler jitter. Rarely useful in cloud environments.
+//
+// Costs:
+//   - The locked M cannot run other goroutines → effectively removes one P's worth
+//     of scheduling capacity while locked.
+//   - Forgetting UnlockOSThread leaks the M (it's destroyed when the goroutine exits).
+//   - On cloud/virtualized infra, pinning rarely helps due to noisy neighbors.
 func demoLockOSThread() {
 	fmt.Println("--- LockOSThread (Thread Pinning) ---")
+	fmt.Println()
 
-	// Normal goroutine — may migrate between OS threads
-	var threadIDs []int
-	var mu sync.Mutex
+	// --- Demo 1: Thread migration without pinning ---
+	// Goroutines normally migrate between OS threads across scheduling points.
+	// Each Gosched() is a yield that allows the scheduler to reassign the G to
+	// a different M.
+	fmt.Println("  [1] Without LockOSThread — goroutines migrate freely")
+	threadsBefore := pprof.Lookup("threadcreate").Count()
 	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			// Multiple yields — scheduler may move this G to different Ms
+			for j := 0; j < 3; j++ {
+				runtime.Gosched()
+			}
+		}(i)
+	}
+	wg.Wait()
+	threadsAfter := pprof.Lookup("threadcreate").Count()
+	fmt.Printf("      10 goroutines, 3 yields each — threads: %d (new: %d)\n",
+		threadsAfter, threadsAfter-threadsBefore)
+	fmt.Println()
 
-	for i := 0; i < 5; i++ {
+	// --- Demo 2: Thread pinning ---
+	// LockOSThread pins this G to its current M. The M is exclusively reserved.
+	// Other goroutines must use different Ms.
+	fmt.Println("  [2] With LockOSThread — goroutine stays on one thread")
+	threadsBefore = pprof.Lookup("threadcreate").Count()
+
+	const numPinned = 4
+	for i := 0; i < numPinned; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
+
+			// This goroutine owns this M exclusively.
+			// Yields won't migrate it — it stays on the same thread.
+			for j := 0; j < 3; j++ {
+				runtime.Gosched()
+			}
+		}(i)
+	}
+	wg.Wait()
+	threadsAfter = pprof.Lookup("threadcreate").Count()
+	fmt.Printf("      %d pinned goroutines — threads after: %d (may spawn extra Ms)\n",
+		numPinned, threadsAfter)
+	fmt.Println()
+
+	// --- Demo 3: Forgetting UnlockOSThread ---
+	// If a goroutine exits while locked, the M is destroyed (not returned to pool).
+	// This is a resource leak — each leaked M is an OS thread that's gone forever.
+	fmt.Println("  [3] Danger: forgetting UnlockOSThread leaks the M")
+	threadsBefore = pprof.Lookup("threadcreate").Count()
+
+	for i := 0; i < 3; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// Force a reschedule to allow thread migration
-			runtime.Gosched()
-			mu.Lock()
-			// In a real scenario, thread ID would vary across iterations
-			threadIDs = append(threadIDs, runtime.NumGoroutine())
-			mu.Unlock()
+			runtime.LockOSThread()
+			// BUG: no UnlockOSThread! When this goroutine exits,
+			// the M is destroyed instead of being returned to the pool.
+			// In production, always use: defer runtime.UnlockOSThread()
 		}()
 	}
 	wg.Wait()
-	fmt.Printf("  Normal: goroutines may migrate between OS threads\n")
+	threadsAfter = pprof.Lookup("threadcreate").Count()
+	fmt.Printf("      3 goroutines forgot to unlock — threads: %d (leaked Ms destroyed)\n", threadsAfter)
+	fmt.Println()
 
-	// Pinned goroutine — stays on one OS thread
-	wg.Add(1)
+	// --- Demo 4: Practical pattern — dedicated worker with pinned thread ---
+	// A common real-world pattern: a single long-lived goroutine owns a pinned
+	// thread and processes work via a channel. This isolates thread-local state
+	// while keeping the rest of the program free to schedule normally.
+	fmt.Println("  [4] Practical pattern: dedicated pinned worker")
+
+	type workItem struct {
+		data   int
+		result chan int
+	}
+	workCh := make(chan workItem, 10)
+
+	// The worker goroutine owns its thread for the entire lifetime.
+	// Use case: C library calls, namespace operations, etc.
 	go func() {
-		defer wg.Done()
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 
-		// This goroutine is now pinned — useful for:
-		// - Thread-local storage in C libraries
-		// - Linux namespace operations
-		// - Latency-sensitive work on isolated CPUs
-		fmt.Printf("  Pinned: goroutine locked to OS thread\n")
-		fmt.Printf("  Warning: pinned M cannot run other goroutines until unlocked\n")
+		for item := range workCh {
+			// Simulate thread-sensitive work (e.g., CGo call, namespace op)
+			item.result <- item.data * 2
+		}
 	}()
-	wg.Wait()
+
+	// Send work from any goroutine — only the worker touches the pinned thread
+	results := make([]int, 5)
+	for i := 0; i < 5; i++ {
+		ch := make(chan int, 1)
+		workCh <- workItem{data: i + 1, result: ch}
+		results[i] = <-ch
+	}
+	close(workCh)
+	fmt.Printf("      Pinned worker results: %v\n", results)
+	fmt.Println("      Only 1 thread pinned — rest of program schedules freely")
 
 	fmt.Println()
-	fmt.Println("  Best practice:")
-	fmt.Println("    runtime.LockOSThread()")
-	fmt.Println("    defer runtime.UnlockOSThread()")
-	fmt.Println("    // ... critical work ...")
-	fmt.Println()
-	fmt.Println("  Validate with: GODEBUG=schedtrace=1000,scheddetail=1")
+	fmt.Println("  ┌──────────────────────────────────────────────────────────┐")
+	fmt.Println("  │  RULES OF THUMB                                         │")
+	fmt.Println("  ├──────────────────────────────────────────────────────────┤")
+	fmt.Println("  │  1. Always defer runtime.UnlockOSThread()               │")
+	fmt.Println("  │  2. Use a dedicated worker goroutine (channel pattern)  │")
+	fmt.Println("  │  3. Benchmark before and after — usually no benefit     │")
+	fmt.Println("  │  4. Validate: GODEBUG=schedtrace=1000,scheddetail=1    │")
+	fmt.Println("  └──────────────────────────────────────────────────────────┘")
 	fmt.Println()
 }

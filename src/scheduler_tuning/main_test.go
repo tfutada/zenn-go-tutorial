@@ -125,8 +125,10 @@ func BenchmarkNetpoller_10Conns(b *testing.B)  { benchNetpoller(b, 10) }
 func BenchmarkNetpoller_50Conns(b *testing.B)  { benchNetpoller(b, 50) }
 func BenchmarkNetpoller_200Conns(b *testing.B) { benchNetpoller(b, 200) }
 
-// BenchmarkLockOSThread measures the overhead of thread pinning.
-// Pinning prevents goroutine migration but costs scheduler flexibility.
+// BenchmarkLockOSThread measures the overhead of thread pinning in various scenarios.
+
+// Single goroutine: pinned vs normal (pure compute, no contention).
+// Expected: nearly identical — pinning has no overhead for single-threaded work.
 
 func BenchmarkWorkNormal(b *testing.B) {
 	for b.Loop() {
@@ -148,5 +150,91 @@ func BenchmarkWorkPinned(b *testing.B) {
 			s += int64(j)
 		}
 		_ = s
+	}
+}
+
+// Concurrent workers: pinned vs normal.
+// Each worker does compute + yields. Pinning reserves one M per worker,
+// reducing scheduler flexibility. With many pinned goroutines, the runtime
+// must spawn extra Ms, increasing overhead.
+
+func benchConcurrentWork(b *testing.B, pinned bool, workers int) {
+	for b.Loop() {
+		var wg sync.WaitGroup
+		for i := 0; i < workers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if pinned {
+					runtime.LockOSThread()
+					defer runtime.UnlockOSThread()
+				}
+				var s int64
+				for j := 0; j < 1000; j++ {
+					s += int64(j)
+				}
+				_ = s
+			}()
+		}
+		wg.Wait()
+	}
+}
+
+func BenchmarkConcurrent_Normal_4(b *testing.B)   { benchConcurrentWork(b, false, 4) }
+func BenchmarkConcurrent_Pinned_4(b *testing.B)   { benchConcurrentWork(b, true, 4) }
+func BenchmarkConcurrent_Normal_16(b *testing.B)  { benchConcurrentWork(b, false, 16) }
+func BenchmarkConcurrent_Pinned_16(b *testing.B)  { benchConcurrentWork(b, true, 16) }
+func BenchmarkConcurrent_Normal_64(b *testing.B)  { benchConcurrentWork(b, false, 64) }
+func BenchmarkConcurrent_Pinned_64(b *testing.B)  { benchConcurrentWork(b, true, 64) }
+func BenchmarkConcurrent_Normal_256(b *testing.B) { benchConcurrentWork(b, false, 256) }
+func BenchmarkConcurrent_Pinned_256(b *testing.B) { benchConcurrentWork(b, true, 256) }
+
+// Dedicated worker pattern: one pinned goroutine processes work via channel.
+// Compares sending work to a pinned worker vs doing work inline.
+// The channel overhead is the cost of isolating thread-sensitive operations.
+
+func BenchmarkDedicatedWorker_Pinned(b *testing.B) {
+	type work struct {
+		n      int
+		result chan int64
+	}
+	ch := make(chan work, 1)
+
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		for w := range ch {
+			var s int64
+			for j := 0; j < w.n; j++ {
+				s += int64(j)
+			}
+			w.result <- s
+		}
+	}()
+
+	result := make(chan int64, 1)
+	for b.Loop() {
+		ch <- work{n: 1000, result: result}
+		_ = <-result
+	}
+	close(ch)
+}
+
+func BenchmarkDedicatedWorker_Inline(b *testing.B) {
+	for b.Loop() {
+		var s int64
+		for j := 0; j < 1000; j++ {
+			s += int64(j)
+		}
+		_ = s
+	}
+}
+
+// Lock/Unlock overhead: measures the cost of the LockOSThread call itself.
+
+func BenchmarkLockUnlockOverhead(b *testing.B) {
+	for b.Loop() {
+		runtime.LockOSThread()
+		runtime.UnlockOSThread()
 	}
 }
