@@ -38,6 +38,7 @@ import (
 	"fmt"
 	"net"
 	"runtime"
+	"runtime/pprof"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -126,6 +127,7 @@ func demoNetpoller() {
 
 	const numClients = 50
 	var connected atomic.Int32
+	threadsBefore := pprof.Lookup("threadcreate").Count()
 
 	// Accept connections in background
 	go func() {
@@ -162,8 +164,10 @@ func demoNetpoller() {
 	wg.Wait()
 	time.Sleep(10 * time.Millisecond) // let accepts finish
 
+	threadsAfter := pprof.Lookup("threadcreate").Count()
 	fmt.Printf("  %d connections handled concurrently\n", connected.Load())
-	fmt.Printf("  OS threads used: far fewer than %d (netpoller multiplexes)\n", numClients)
+	fmt.Printf("  OS threads created: %d (before: %d, after: %d) for %d connections\n",
+		threadsAfter-threadsBefore, threadsBefore, threadsAfter, numClients)
 	fmt.Println()
 	fmt.Println("  Tip: Run with GODEBUG=netpoll=1 to see poller activity:")
 	fmt.Println("    runtime: netpoll: poll returned n=3")
