@@ -103,11 +103,12 @@ go get github.com/modelcontextprotocol/go-sdk
 
 ### Performance & Optimization
 - **Benchmarking**: `benchmark/basics`, `benchmark/part1`, `benchmark/part2`
-- **Memory Optimization**: `pre_alloc`, `buffer1`, `memory_usage`, `interning`, `memory_optimization_guide` — see `src/memory_optimization_guide/CLAUDE.md`
+- **Memory Optimization**: `pre_alloc`, `alloc_optimization`, `buffer1`, `memory_usage`, `interning`, `memory_optimization_guide` — see `src/memory_optimization_guide/CLAUDE.md`
 - **Escape Analysis**: `memory/escape_analysis`
 - **String Optimization**: `string1`, `string2`, `strings1`, `string_join` — see `src/string_join/CLAUDE.md`
 - **GC Tuning**: `gc_tuning`
 - **Syscall Cost**: `syscall_cost`
+- **Scheduler Tuning**: `scheduler_tuning` (GOMAXPROCS, netpoller, LockOSThread)
 - **Chunked Processing**: `chunked_processing`
 
 ### Network Programming
