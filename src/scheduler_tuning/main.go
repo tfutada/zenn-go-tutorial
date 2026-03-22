@@ -167,14 +167,18 @@ func demoNetpoller() {
 	threadsAfter := pprof.Lookup("threadcreate").Count()
 	newThreads := threadsAfter - threadsBefore
 	fmt.Printf("  %d connections handled concurrently\n", connected.Load())
-	fmt.Printf("  OS threads: %d total (%d new for %d connections)\n",
-		threadsAfter, newThreads, numClients)
+	fmt.Println()
+	fmt.Println("  ┌─────────────────────────────────────────────────┐")
+	fmt.Printf("  │  CONNECTIONS: %-4d  THREADS: %-4d  (NEW: %-4d)  │\n",
+		numClients, threadsAfter, newThreads)
+	fmt.Println("  ├─────────────────────────────────────────────────┤")
 	if newThreads == 0 {
-		fmt.Println("  -> netpoller handled all connections with existing threads (no new Ms needed)")
+		fmt.Println("  │  Netpoller reused existing threads (0 new Ms)  │")
 	} else {
-		fmt.Printf("  -> only %d threads for %d connections (netpoller multiplexes the rest)\n",
+		fmt.Printf("  │  %d threads served %d conns (netpoller muxed)   │\n",
 			newThreads, numClients)
 	}
+	fmt.Println("  └─────────────────────────────────────────────────┘")
 	fmt.Println()
 	fmt.Println("  Tip: Run with GODEBUG=netpoll=1 to see poller activity:")
 	fmt.Println("    runtime: netpoll: poll returned n=3")
