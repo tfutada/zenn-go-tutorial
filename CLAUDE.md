@@ -109,6 +109,7 @@ go get github.com/modelcontextprotocol/go-sdk
 - **GC Tuning**: `gc_tuning`
 - **Syscall Cost**: `syscall_cost`
 - **Scheduler Tuning**: `scheduler_tuning` (GOMAXPROCS, netpoller, LockOSThread)
+- **LockOSThread Deep Dive**: `lock_os_thread` (thread identity, lock nesting, main thread, CGo TLS, M leak detection)
 - **Chunked Processing**: `chunked_processing`
 
 ### Network Programming
