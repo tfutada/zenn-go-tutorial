@@ -35,7 +35,6 @@ func main() {
 	demo1_ThreadIdentity()
 	demo2_LockNesting()
 	demo3_MainGoroutine()
-	demo4_CGoTLS()
 	demo5_MLeakDetection()
 }
 
