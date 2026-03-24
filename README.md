@@ -28,6 +28,8 @@ This repository contains standalone Go examples organized by topic in the `src/`
 
 ### Network Programming
 - **HTTP Servers**: `net1`, `net2`, `net3`, `http_mux`, `clientserver1`
+- **Long-Lived Connections**: `sse`, `long_lived_connections` - deadlines, cancellation, bounded queues, backpressure
+- **QUIC**: `quic_go` - multiplexed streams, 0-RTT, quic-go transport basics
 - **TCP/UDP**: `tcp_udp/tcp`, `tcp_udp/udp` - low-level networking
 - **Reverse Proxy**: `reverse_proxy`, `reverse_proxy_reuse` - connection pooling
 - **Packet Capture**: `gopackets/livecap`, `gopackets/net_devices` - network analysis

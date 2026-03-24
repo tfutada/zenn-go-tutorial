@@ -33,6 +33,10 @@ More Ps != always faster. Benchmark results on Apple M2 (8 cores):
 - CPU-bound: parallelism helps, but diminishing returns past 2 Ps
 - Contention-heavy: more Ps = more threads fighting for locks = **10x slower**
 
+CPU-bound work is still a normal goroutine use case. The runtime adds some
+overhead, but M:N scheduling is not "only for I/O", and `LockOSThread` is not a
+general fix for compute-heavy code.
+
 ## Netpoller (epoll/kqueue)
 
 Go uses OS-level I/O multiplexing instead of blocking one thread per socket:
@@ -59,9 +63,36 @@ defer runtime.UnlockOSThread()
 Use cases (rare):
 - CGo libraries requiring thread-local state (OpenGL, etc.)
 - Linux namespace operations (`unshare`, `setns`)
-- Ultra-low-latency on isolated CPUs
+- Main-thread APIs (Cocoa, some GUI / graphics setups)
 
-For typical server workloads, Go's scheduler handles thread placement well without manual intervention.
+`LockOSThread` preserves thread identity. It does not bypass Go scheduling,
+preemption, or GC, so it is a correctness tool, not a generic performance knob.
+
+If you make permanent per-thread state changes, keep the goroutine locked until
+it exits so other goroutines do not later inherit that thread.
+
+In cloud/container environments such as AWS EKS, `LockOSThread` still keeps the
+goroutine on one Linux thread, but it does not guarantee a stable physical core
+or vCPU. Guest scheduling, host scheduling, and virtualization can still move
+that thread around, so this is usually the wrong tool for latency or CPU
+placement tuning.
+
+For ordinary coordination between goroutines, use a `sync.Mutex`, channels,
+atomics, or other synchronization primitives. `LockOSThread` is not a mutex and
+does not protect shared memory.
+
+For typical server workloads, Go's scheduler handles CPU-bound and I/O-bound
+work well without manual thread pinning.
+
+## References
+
+- Go runtime docs: https://pkg.go.dev/runtime#LockOSThread
+- Go 1.14 preemption notes: https://go.dev/doc/go1.14
+- runc namespace bootstrap note: https://github.com/opencontainers/runc/blob/main/libcontainer/nsenter/README.md
+- Go issue #20458 (nesting): https://github.com/golang/go/issues/20458
+- Go issue #20395 (thread teardown on exit): https://github.com/golang/go/issues/20395
+- Go issue #23112 (startup thread / init): https://github.com/golang/go/issues/23112
+- Go proposal #70089 (`runtime/mainthread`): https://github.com/golang/go/issues/70089
 
 ## Diagnostic Tools
 

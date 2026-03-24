@@ -38,11 +38,17 @@ import (
 	"fmt"
 	"net"
 	"runtime"
-	"runtime/pprof"
+	"runtime/metrics"
 	"sync"
 	"sync/atomic"
 	"time"
 )
+
+func liveThreadCount() int {
+	samples := []metrics.Sample{{Name: "/sched/threads/total:threads"}}
+	metrics.Read(samples)
+	return int(samples[0].Value.Uint64())
+}
 
 func main() {
 	fmt.Println("=== Scheduler-Level Tuning ===")
@@ -127,7 +133,7 @@ func demoNetpoller() {
 
 	const numClients = 50
 	var connected atomic.Int32
-	threadsBefore := pprof.Lookup("threadcreate").Count()
+	threadsBefore := liveThreadCount()
 
 	// Accept connections in background
 	go func() {
@@ -164,7 +170,7 @@ func demoNetpoller() {
 	wg.Wait()
 	time.Sleep(10 * time.Millisecond) // let accepts finish
 
-	threadsAfter := pprof.Lookup("threadcreate").Count()
+	threadsAfter := liveThreadCount()
 	newThreads := threadsAfter - threadsBefore
 	fmt.Printf("  %d connections handled concurrently\n", connected.Load())
 	fmt.Println()
@@ -191,9 +197,10 @@ func demoNetpoller() {
 // run on that thread until UnlockOSThread is called.
 //
 // How it works in the G-M-P model:
-//   Normal:  G can move between Ms freely (scheduler decides)
-//   Locked:  G is bound to one M — that M is reserved exclusively
-//            Other Gs cannot use that M, and a new M may be spawned to compensate.
+//
+//	Normal:  G can move between Ms freely (scheduler decides)
+//	Locked:  G is bound to one M — that M is reserved exclusively
+//	         Other Gs cannot use that M, and a new M may be spawned to compensate.
 //
 // Real-world use cases:
 //  1. CGo + thread-local state: C libraries (OpenGL, SQLite in certain modes)
@@ -202,14 +209,18 @@ func demoNetpoller() {
 //  2. Linux namespaces: unshare(2) and setns(2) operate on the calling thread.
 //     Without LockOSThread, the goroutine might resume on a different thread
 //     that's still in the original namespace.
-//  3. Ultra-low-latency: on bare metal with isolated CPUs (via isolcpus or cgroups),
-//     pinning avoids scheduler jitter. Rarely useful in cloud environments.
+//  3. Main-thread APIs: some GUI frameworks and graphics stacks require the
+//     startup/main thread for related calls.
 //
 // Costs:
 //   - The locked M cannot run other goroutines → effectively removes one P's worth
 //     of scheduling capacity while locked.
 //   - Forgetting UnlockOSThread leaks the M (it's destroyed when the goroutine exits).
-//   - On cloud/virtualized infra, pinning rarely helps due to noisy neighbors.
+//   - Pinning does not bypass Go scheduling, preemption, or GC.
+//   - In virtualized/container environments (for example EKS), it still does
+//     not guarantee stable CPU or vCPU placement.
+//   - It is not a synchronization primitive; use a mutex/channel/atomic for
+//     shared memory coordination.
 func demoLockOSThread() {
 	fmt.Println("--- LockOSThread (Thread Pinning) ---")
 	fmt.Println()
@@ -219,7 +230,7 @@ func demoLockOSThread() {
 	// Each Gosched() is a yield that allows the scheduler to reassign the G to
 	// a different M.
 	fmt.Println("  [1] Without LockOSThread — goroutines migrate freely")
-	threadsBefore := pprof.Lookup("threadcreate").Count()
+	threadsBefore := liveThreadCount()
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
@@ -232,7 +243,7 @@ func demoLockOSThread() {
 		}(i)
 	}
 	wg.Wait()
-	threadsAfter := pprof.Lookup("threadcreate").Count()
+	threadsAfter := liveThreadCount()
 	fmt.Printf("      10 goroutines, 3 yields each — threads: %d (new: %d)\n",
 		threadsAfter, threadsAfter-threadsBefore)
 	fmt.Println()
@@ -241,7 +252,7 @@ func demoLockOSThread() {
 	// LockOSThread pins this G to its current M. The M is exclusively reserved.
 	// Other goroutines must use different Ms.
 	fmt.Println("  [2] With LockOSThread — goroutine stays on one thread")
-	threadsBefore = pprof.Lookup("threadcreate").Count()
+	threadsBefore = liveThreadCount()
 
 	const numPinned = 4
 	for i := 0; i < numPinned; i++ {
@@ -259,7 +270,7 @@ func demoLockOSThread() {
 		}(i)
 	}
 	wg.Wait()
-	threadsAfter = pprof.Lookup("threadcreate").Count()
+	threadsAfter = liveThreadCount()
 	fmt.Printf("      %d pinned goroutines — threads after: %d (may spawn extra Ms)\n",
 		numPinned, threadsAfter)
 	fmt.Println()
@@ -268,7 +279,7 @@ func demoLockOSThread() {
 	// If a goroutine exits while locked, the M is destroyed (not returned to pool).
 	// This is a resource leak — each leaked M is an OS thread that's gone forever.
 	fmt.Println("  [3] Danger: forgetting UnlockOSThread leaks the M")
-	threadsBefore = pprof.Lookup("threadcreate").Count()
+	threadsBefore = liveThreadCount()
 
 	for i := 0; i < 3; i++ {
 		wg.Add(1)
@@ -281,7 +292,7 @@ func demoLockOSThread() {
 		}()
 	}
 	wg.Wait()
-	threadsAfter = pprof.Lookup("threadcreate").Count()
+	threadsAfter = liveThreadCount()
 	fmt.Printf("      3 goroutines forgot to unlock — threads: %d (leaked Ms destroyed)\n", threadsAfter)
 	fmt.Println()
 
@@ -326,8 +337,9 @@ func demoLockOSThread() {
 	fmt.Println("  ├──────────────────────────────────────────────────────────┤")
 	fmt.Println("  │  1. Always defer runtime.UnlockOSThread()               │")
 	fmt.Println("  │  2. Use a dedicated worker goroutine (channel pattern)  │")
-	fmt.Println("  │  3. Benchmark before and after — usually no benefit     │")
-	fmt.Println("  │  4. Validate: GODEBUG=schedtrace=1000,scheddetail=1    │")
+	fmt.Println("  │  3. Treat it as a correctness tool, not a perf knob     │")
+	fmt.Println("  │  4. Use mutex/channel/atomic for shared state           │")
+	fmt.Println("  │  5. Validate: GODEBUG=schedtrace=1000,scheddetail=1    │")
 	fmt.Println("  └──────────────────────────────────────────────────────────┘")
 	fmt.Println()
 }

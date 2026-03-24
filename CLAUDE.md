@@ -108,12 +108,14 @@ go get github.com/modelcontextprotocol/go-sdk
 - **String Optimization**: `string1`, `string2`, `strings1`, `string_join` — see `src/string_join/CLAUDE.md`
 - **GC Tuning**: `gc_tuning`
 - **Syscall Cost**: `syscall_cost`
-- **Scheduler Tuning**: `scheduler_tuning` (GOMAXPROCS, netpoller, LockOSThread)
-- **LockOSThread Deep Dive**: `lock_os_thread` (thread identity, lock nesting, main thread, M leak detection)
+- **Scheduler Tuning**: `scheduler_tuning` (GOMAXPROCS, netpoller, LockOSThread as thread affinity, not a perf knob)
+- **LockOSThread Deep Dive**: `lock_os_thread` (thread identity, lock nesting, startup thread, per-thread state)
 - **Chunked Processing**: `chunked_processing`
 
 ### Network Programming
 - **HTTP**: `net1`, `net2`, `net3`, `http_mux`, `clientserver1`, `http_clients`, `http_churn_out`, `handlemanyrequests`
+- **Long-Lived Connections**: `sse`, `long_lived_connections` (deadlines, cancellation, bounded queues, backpressure)
+- **QUIC**: `quic_go` (multiplexed streams, 0-RTT, quic-go transport basics)
 - **TCP/UDP**: `tcp_udp/tcp`, `tcp_udp/udp`
 - **Reverse Proxy**: `reverse_proxy`, `reverse_proxy_reuse`
 - **Packet Capture**: `gopackets/livecap`, `gopackets/net_devices`
