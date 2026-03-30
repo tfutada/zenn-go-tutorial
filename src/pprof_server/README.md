@@ -323,6 +323,58 @@ signal.Notify(sigCh, os.Interrupt)
 
 Buffer size 1 prevents missed signals — `signal.Notify` doesn't block on send.
 
+## Troubleshooting: AMD GPU (MES Hang) System Freeze Under Load
+
+On AMD Phoenix3 APUs (Radeon 780M iGPU, gfx11), running CPU-intensive load tests like `wrk` or `vegeta` against this server can trigger a full system freeze. The kernel log shows:
+
+```
+amdgpu: MES failed to respond to msg=MISC (WAIT_REG_MEM)
+```
+
+The MES (Micro Engine Scheduler) hang is a known amdgpu driver issue where heavy CPU/memory pressure causes the GPU firmware scheduler to become unresponsive, freezing the entire system (no TTY, no SysRq).
+
+### Fix: Disable MES logging
+
+Add the `amdgpu.mes_log_enable=0` kernel parameter:
+
+```bash
+# Edit GRUB config
+sudo nano /etc/default/grub
+
+# Add to GRUB_CMDLINE_LINUX_DEFAULT:
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash amdgpu.mes_log_enable=0"
+
+# Apply and reboot
+sudo update-grub
+sudo reboot
+```
+
+Verify after reboot:
+
+```bash
+# Confirm parameter is active
+cat /proc/cmdline | grep amdgpu.mes_log_enable=0
+
+# Check kernel log for clean GPU init (no MES errors)
+journalctl -b -k | grep -i "mes\|amdgpu"
+```
+
+### If freezes continue
+
+Escalate to disabling dynamic power management:
+
+```bash
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash amdgpu.mes_log_enable=0 amdgpu.dpm=0"
+```
+
+This reduces GPU power efficiency but eliminates another class of firmware-related hangs.
+
+### Affected environment
+
+- AMD Phoenix3 APU (Radeon 780M, device `1002:1900`)
+- Ubuntu 24.04 HWE, kernel 6.17.x
+- Triggered by sustained CPU load (wrk/vegeta load testing, pprof CPU profiling)
+
 ## Comparison: Go pprof vs Rust/Tokio Profiling
 
 | | Go | Rust/Tokio |
