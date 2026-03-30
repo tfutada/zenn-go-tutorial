@@ -84,9 +84,160 @@ curl http://localhost:6060/debug/pprof/goroutine?debug=1
 go tool pprof -http=:9090 http://localhost:6060/debug/pprof/heap
 ```
 
-## Sample Profiling Results
+## Load Testing with Vegeta
 
-After 200 `/gc` requests:
+[Vegeta](https://github.com/tsenart/vegeta) is an HTTP load testing tool. Install with `brew install vegeta` or `go install github.com/tsenart/vegeta@latest`.
+
+```bash
+# Test each endpoint at 200 req/s for 10 seconds
+echo "GET http://localhost:8080/fast" | vegeta attack -rate=200 -duration=10s | vegeta report
+echo "GET http://localhost:8080/slow" | vegeta attack -rate=200 -duration=10s | vegeta report
+echo "GET http://localhost:8080/gc"   | vegeta attack -rate=200 -duration=10s | vegeta report
+```
+
+### Results (2000 requests per endpoint, 200 req/s)
+
+| Endpoint | Mean Latency | P95 | P99 | Max | Success |
+|----------|-------------|-----|-----|-----|---------|
+| `/fast` | 233 us | 370 us | 511 us | 2.8 ms | 100% |
+| `/slow` | 151 ms | 284 ms | 295 ms | 299 ms | 100% |
+| `/gc` | 612 us | 1.3 ms | 2.1 ms | 5.1 ms | 100% |
+
+**Observations:**
+
+- **`/fast`** — sub-millisecond. Pure overhead is HTTP handling.
+- **`/slow`** — mean ~151ms, close to the midpoint of the 1-300ms random range. P99/max near 300ms confirms the uniform distribution.
+- **`/gc`** — only ~612us mean despite heavy allocation. Go's allocator is fast. But the tail (P99: 2.1ms, max: 5ms) shows GC pauses. At higher rates or longer durations, those tails grow as `longLivedData` accumulates.
+
+### Heap Profile After Vegeta Load
+
+After 2000 `/gc` requests:
+
+**`inuse_space`** (what's still in memory):
+```
+  115.12MB 97.87%  main.gcHeavyHandler
+    2.50MB  2.13%  runtime.mallocgc
+```
+
+**`alloc_space`** (total ever allocated):
+```
+9.98GB 99.86%  main.gcHeavyHandler
+```
+
+GC reclaimed ~9.87 GB (98.8%) of the 9.98 GB total allocations. The remaining **115 MB** is stuck in `longLivedData` — a leak that scales linearly with request count.
+
+## Load Testing with wrk
+
+[wrk](https://github.com/wg/wrk) is a high-throughput HTTP benchmarking tool. Unlike Vegeta's fixed rate, wrk pushes as many requests as possible with concurrent connections.
+
+```bash
+# 10 threads, 200 connections, 10 seconds
+wrk -t10 -c200 -d10s http://localhost:8080/fast
+wrk -t10 -c200 -d10s http://localhost:8080/slow
+wrk -t10 -c200 -d10s http://localhost:8080/gc
+```
+
+### Results (10 threads, 200 connections, 10s)
+
+| Endpoint | Req/sec | Avg Latency | Max Latency | Total Requests |
+|----------|---------|-------------|-------------|----------------|
+| `/fast` | 107,080 | 1.92 ms | 46 ms | 1,072,116 |
+| `/slow` | 1,318 | 150 ms | 299 ms | 13,234 |
+| `/gc` | 7,838 | 33 ms | 478 ms | 78,573 |
+
+**Observations:**
+
+- **`/fast`** — **107K req/s** shows Go's HTTP server throughput ceiling on this machine.
+- **`/slow`** — throughput capped by sleep time. 200 connections / ~150ms avg = ~1,300 req/s, matches perfectly.
+- **`/gc`** — avg latency jumped to 33ms (vs 612us with Vegeta) due to GC pressure under heavy concurrent load. Max 478ms indicates GC stop-the-world pauses.
+
+### Heap Profile After wrk Load
+
+After 78,573 `/gc` requests:
+
+**`inuse_space`**:
+```
+4.48GB 99.89%  main.gcHeavyHandler
+```
+
+**`alloc_space`**:
+```
+392.07GB 99.59%  main.gcHeavyHandler
+```
+
+### Vegeta vs wrk Comparison
+
+| | Vegeta (200 req/s) | wrk (200 connections) |
+|---|---|---|
+| `/gc` requests | 2,000 | 78,573 |
+| `/gc` avg latency | 612 us | 33 ms |
+| `/gc` max latency | 5.1 ms | 478 ms |
+| Heap in-use after | 115 MB | 4.48 GB |
+| Total allocated | 9.98 GB | 392 GB |
+
+wrk exposes problems that Vegeta's gentle fixed rate misses: GC latency spikes, memory leak acceleration, and tail latency blowup under saturation.
+
+### CPU Profile Under wrk Load
+
+Capture a CPU profile while wrk is running — this requires two concurrent commands:
+
+```bash
+# Terminal 2: start CPU profile capture (10 seconds)
+curl -s "http://localhost:6060/debug/pprof/profile?seconds=10" -o /tmp/cpu_gc.prof &
+
+# Terminal 2: immediately start wrk (9 seconds, finishes before profile ends)
+wrk -t10 -c200 -d9s http://localhost:8080/gc
+
+# Analyze
+go tool pprof -top -nodecount=25 /tmp/cpu_gc.prof
+
+# Filter to GC-related functions only
+go tool pprof -top -focus="gc|GC|sweep|scan|mark|grey" /tmp/cpu_gc.prof
+```
+
+The `-focus` flag filters the profile to functions matching the regex — useful for isolating GC overhead.
+
+**Results** (10s wall time, 49.15s total CPU = ~5 cores busy):
+
+```
+      flat  flat%   sum%        cum   cum%
+    14.32s 29.14% 29.14%     14.32s 29.14%  syscall.rawsyscalln
+     6.61s 13.45% 42.58%      6.61s 13.45%  runtime.pthread_cond_wait
+     6.11s 12.43% 55.02%      6.11s 12.43%  runtime.memclrNoHeapPointers
+     5.86s 11.92% 66.94%      5.86s 11.92%  runtime.usleep
+     1.66s  3.38% 70.32%      1.66s  3.38%  runtime.pthread_cond_signal
+     1.24s  2.52% 72.84%      6.54s 13.31%  runtime.(*sweepLocked).sweep
+     1.09s  2.22% 75.06%        22s 44.76%  runtime.mallocgcSmallNoscan
+     1.01s  2.05% 77.11%      1.01s  2.05%  internal/runtime/atomic.(*Uint64).Add
+        1s  2.03% 79.15%      1.01s  2.05%  runtime.greyobject
+     0.70s  1.42% 80.57%     14.07s 28.63%  runtime.(*mcache).refill
+     0.33s  0.67%            1.83s  3.72%  runtime.scanObject
+     0.15s  0.31%           23.18s 47.16%  main.gcHeavyHandler
+```
+
+**CPU breakdown by category:**
+
+| Category | Time | % | Key functions |
+|----------|------|---|---------------|
+| Syscalls (network I/O) | 14.32s | 29% | `syscall.rawsyscalln` |
+| GC sweep | 6.54s | 13% | `(*sweepLocked).sweep` — reclaiming dead objects |
+| Memory zeroing | 6.11s | 12% | `memclrNoHeapPointers` — Go zeroes all `make()` allocations |
+| Thread sync | 8.27s | 17% | `pthread_cond_wait/signal` — goroutine scheduling |
+| GC mark/scan | 2.84s | 6% | `scanObject`, `greyobject` — tracing live references |
+| Span management | 14.07s | 29% cum | `(*mcache).refill` — getting new memory spans |
+
+**Key insight:** `gcHeavyHandler` itself uses only **0.15s flat CPU** — almost nothing. But its cumulative cost is **23.18s (47%)** because each `make([]byte, 10240)` triggers:
+
+1. **Allocation** (`mallocgcSmallNoscan`) — find a free span slot
+2. **Zeroing** (`memclrNoHeapPointers`) — Go's safety guarantee, every byte zeroed
+3. **Sweep** (`(*sweepLocked).sweep`) — reclaim dead spans to make room
+4. **Mark/scan** (`scanObject`, `greyobject`) — trace `longLivedData` references, cost grows with leak size
+
+GC-related functions account for ~55% of total CPU. The "fast allocator" still dominates when you allocate at scale.
+
+## Sample Profiling Results (curl)
+
+After 200 `/gc` requests with curl:
 
 **`inuse_space`** (what's still in memory):
 ```
