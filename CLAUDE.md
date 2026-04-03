@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## General Rules
+
+When editing files, always verify you are in the correct directory and editing the correct file before making changes. For monorepo projects, confirm the target package/service path explicitly.
+
+## Environment Variables
+
+Environment variables must have no defaults - fail early with a clear error message if required env vars are missing. Never propose fallback values or silently skip missing env vars.
+
 ## Repository Overview
 
 This is a Go tutorial repository containing standalone examples organized by topic in the `src/` directory. Each subdirectory demonstrates a specific Go concept, pattern, or technique.
@@ -11,6 +19,7 @@ This is a Go tutorial repository containing standalone examples organized by top
 - **Module**: `tutorial1` (Go 1.25.3)
 - **Organization**: Standalone examples in `src/` subdirectories
 - **Pattern**: Most examples have a `main.go` with a runnable program; some have accompanying test files
+- This is a polyglot workspace with TypeScript, Rust, and Go projects. Key services include voice-proxy (TypeScript/pnpm), a Next.js chatbot app, and various Go/Rust learning/benchmark projects. Always check which service/language context the user is working in before running commands.
 
 ## Common Commands
 

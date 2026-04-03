@@ -21,6 +21,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -28,6 +29,13 @@ import (
 )
 
 const quicALPN = "tutorial1-quic-demo"
+const quicDisableReceiveBufferWarningEnv = "QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING"
+
+func disableQUICReceiveBufferWarning() {
+	// This tutorial runs tiny localhost exchanges; suppress the kernel socket
+	// buffer warning so the transport behavior stays readable in the output.
+	_ = os.Setenv(quicDisableReceiveBufferWarningEnv, "true")
+}
 
 type signalingSessionCache struct {
 	inner tls.ClientSessionCache
@@ -382,6 +390,8 @@ func demoZeroRTT() error {
 }
 
 func main() {
+	disableQUICReceiveBufferWarning()
+
 	fmt.Println("=== QUIC In Go ===")
 	fmt.Println()
 	fmt.Println("Using quic-go for a small local demo of streams and 0-RTT.")

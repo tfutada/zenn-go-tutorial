@@ -18,6 +18,12 @@ Sources:
 go run src/quic_go/main.go
 ```
 
+For cleaner tutorial output, the example sets
+`QUIC_GO_DISABLE_RECEIVE_BUFFER_WARNING=true` before opening QUIC sockets. That
+warning is about kernel UDP buffer limits on the host OS, not about the demo's
+correctness. In production, raise the OS socket buffer limits instead of
+silencing the warning.
+
 ## Test
 
 ```bash

@@ -2,11 +2,17 @@ package main
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/quic-go/quic-go"
 )
+
+func TestMain(m *testing.M) {
+	disableQUICReceiveBufferWarning()
+	os.Exit(m.Run())
+}
 
 func TestMultiplexedStreamsReturnIndependently(t *testing.T) {
 	serverTLS, clientTLS, _, err := newTLSConfigs()
