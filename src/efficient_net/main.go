@@ -152,6 +152,9 @@ func getReader(r io.Reader) *bufio.Reader {
 }
 
 func putReader(br *bufio.Reader) {
+	if br.Size() > 8192 {
+		return // don't pool oversized buffers, let GC collect
+	}
 	br.Reset(nil) // release reference to underlying reader
 	readerPool.Put(br)
 }
@@ -163,6 +166,9 @@ func getWriter(w io.Writer) *bufio.Writer {
 }
 
 func putWriter(bw *bufio.Writer) {
+	if bw.Size() > 8192 {
+		return
+	}
 	bw.Reset(nil)
 	writerPool.Put(bw)
 }

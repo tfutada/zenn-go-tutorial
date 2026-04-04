@@ -69,6 +69,34 @@ HTTP/2: multiplexed binary frames per connection
 
 HTTP/2 eliminates the drain problem entirely. Strong argument for gRPC/HTTP2 in microservice-to-microservice communication.
 
+### sync.Pool for bufio Recycling
+
+`bufio.Reader` wraps an `io.Reader` with an internal buffer (default 4KB). Instead of one syscall per `Read()`, it fills the buffer in one syscall and serves subsequent reads from memory.
+
+**Why pool it:** `sync.Pool` is primarily a **GC optimization**, not an allocator optimization. Go's allocator is fast (~50ns for 4KB), but the GC cost of tracking, scanning, and sweeping thousands of short-lived buffers is significant.
+
+```
+Without pool (10K req/s):
+  10K allocs/sec → GC scans 10K objects → longer pauses → p99 spikes
+
+With pool (10K req/s):
+  ~1 buffer reused 10K times → GC sees 1 object → smooth p99
+```
+
+**Buffer never shrinks:** `Reset()` only resets the read/write positions — it does not reallocate the internal `[]byte`. If `ReadBytes`/`ReadLine` causes growth (e.g., 4KB → 64KB), that oversized buffer stays forever. Guard against this:
+
+```go
+func putReader(br *bufio.Reader) {
+    if br.Size() > 8192 {
+        return  // don't pool oversized buffers, let GC collect
+    }
+    br.Reset(nil)  // release reference to underlying reader
+    readerPool.Put(br)
+}
+```
+
+The `net/http` standard library uses the same pattern internally.
+
 ### Rust hyper Comparison
 
 | | Go `net/http` | Rust `hyper` |
