@@ -142,7 +142,7 @@ go get github.com/modelcontextprotocol/go-sdk
 - **Readers/Writers**: `reader_writer/limiter`, `reader_writer/multi`, `reader_writer/pipe`
 - **Buffered I/O**: `bufio/writer`, `buffer1`
 - **File Operations**: `file1`, `file2`, `bom`
-- **Memory-Mapped I/O**: `mmap`
+- **Memory-Mapped I/O**: `mmap`, `mmap_vs_pread` (mincore-gated mmap fast path with pread fallback, as in VictoriaMetrics)
 - **Embed**: `embed_file`, `embed_dir`, `embed_template`
 - **Streaming CSV**: `stream_csv`
 
