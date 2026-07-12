@@ -150,6 +150,7 @@ go get github.com/modelcontextprotocol/go-sdk
 - **Data Flow**: `dataflow1` (uses Apache Beam SDK)
 - **JSON Streaming**: `json_stream`
 - **Hash Maps**: `hash_map`
+- **Bloom Filter**: `bloom_filter` (per-block skip index as in VictoriaLogs/LSM engines)
 - **One Billion Row Challenge**: Multiple implementations in `one_billion_challenge/`
 - **Bytes Processing**: `bytes1`, `bytes2`
 
