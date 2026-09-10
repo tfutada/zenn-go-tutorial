@@ -1,0 +1,6 @@
+# Keep the folder, ignore the dumps that land in it
+scratch/*
+!scratch/.gitkeep
+
+kubeconfig
+*.kubeconfig

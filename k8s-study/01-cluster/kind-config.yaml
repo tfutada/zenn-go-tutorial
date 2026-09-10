@@ -1,0 +1,29 @@
+# kind create cluster --config k8s-study/01-cluster/kind-config.yaml
+#
+# Three nodes rather than the default one: a single-node cluster makes the
+# scheduling exercises in 03-debugging/pending/ meaningless, because there is
+# never a second node the Pod could have fit on.
+#
+# The control-plane port mappings and ingress-ready label are what an ingress
+# controller needs to be reachable from the host on :80 / :443. Needed by
+# 02-objects/05-ingress/.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: study
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+  - role: worker
+  - role: worker
