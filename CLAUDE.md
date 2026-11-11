@@ -16,7 +16,7 @@ This is a Go tutorial repository containing standalone examples organized by top
 
 ## Project Structure
 
-- **Module**: `tutorial1` (Go 1.26.1)
+- **Module**: `tutorial1` (Go 1.27.4)
 - **Organization**: Standalone examples in `src/` subdirectories
 - **Pattern**: Most examples have a `main.go` with a runnable program; some have accompanying test files
 - This is a polyglot workspace with TypeScript, Rust, and Go projects. Key services include voice-proxy (TypeScript/pnpm), a Next.js chatbot app, and various Go/Rust learning/benchmark projects. Always check which service/language context the user is working in before running commands.
@@ -156,6 +156,7 @@ go get github.com/modelcontextprotocol/go-sdk
 - **String Optimization**: `string1`, `string2`, `strings1`, `string_join` — see `src/string_join/CLAUDE.md`
 - **GC Tuning**: `gc_tuning`
 - **Syscall Cost**: `syscall_cost`
+- **Branch Prediction**: `branch_prediction` (sorted vs. unsorted bytes; the plain `if` becomes a CSEL on arm64, so a second loop adds through a pointer to keep the real branch)
 - **Filesystem Benchmarks**: `rename_bench`, `ebs_rename_bench` (rename vs. read-back cost)
 - **Copy Strategies**: `copybuffer` (`io.Copy` vs. `io.CopyBuffer`)
 - **Scheduler Tuning**: `scheduler_tuning` (GOMAXPROCS, netpoller, LockOSThread as thread affinity, not a perf knob)

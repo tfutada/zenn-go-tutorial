@@ -24,6 +24,7 @@ This repository contains standalone Go examples organized by topic in the `src/`
 - **Memory Optimization**: `pre_alloc`, `buffer1`, `memory_usage`, `interning`
 - **Escape Analysis**: `memory/escape_analysis` - understanding stack vs heap allocation
 - **String Optimization**: `string1`, `string2`, `strings1` - efficient string handling
+- **Branch Prediction**: `branch_prediction` - same loop on sorted vs unsorted bytes, and how the compiler's CSEL hides the branch
 - **Profiling**: CPU, memory, and execution tracing examples
 
 ### Network Programming
